@@ -28,3 +28,38 @@ Continue building your app on:
 2. Deploy your chats from the v0 interface
 3. Changes are automatically pushed to this repository
 4. Vercel deploys the latest version from this repository
+
+## Development Commands
+
+This project uses **npm** as the package manager. Here are the available commands:
+
+### Install Dependencies
+```bash
+npm install
+```
+
+### Development Server
+Start the development server on [http://localhost:3000](http://localhost:3000):
+```bash
+npm run dev
+```
+
+### Build for Production
+Create an optimized production build:
+```bash
+npm run build
+```
+
+### Start Production Server
+Run the production build locally:
+```bash
+npm start
+```
+
+### Linting
+Check code quality with ESLint:
+```bash
+npm run lint
+```
+
+**Note:** The correct command to build the project is `npm run build`, not `npm build`.
