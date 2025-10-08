@@ -58,7 +58,7 @@ export function MySubjectsList({ studentId }: MySubjectsListProps) {
   return (
     <div className="space-y-4">
       {subjects.map((subject) => {
-        const finalGrade = subjectGrades.get(subject.id)
+  const finalGrade = subjectGrades.get(subject.id) ?? null
         const progress = finalGrade !== null ? (finalGrade / 5.0) * 100 : 0
         const isExpanded = expandedSubject === subject.id
         const assignments = subjectAssignments.get(subject.id) || []
