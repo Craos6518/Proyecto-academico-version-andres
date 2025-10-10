@@ -14,6 +14,7 @@ export interface User {
   lastName: string
   roleId: number
   roleName: string
+  role?: string // Nuevo: para compatibilidad JWT
   isActive: boolean
   password: string
 }
