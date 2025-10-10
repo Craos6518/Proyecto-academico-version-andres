@@ -38,3 +38,71 @@ Authorization: Bearer <token JWT válido>
 
 ## Resultado
 Todas las pruebas en Postman fueron exitosas: los endpoints permiten acceso solo al rol correspondiente y rechazan accesos no autorizados.
+
+## Ejemplos de petición y respuesta
+
+### Admin
+**Petición:**
+```http
+GET /api/admin/secure-data
+Authorization: Bearer <token>
+```
+**Respuesta:**
+```json
+{
+  "message": "Acceso concedido solo a administrador",
+  "users": [ { "id": 1, "name": "Juan Pérez", "role": "admin" }, ... ],
+  "subjects": [ { "id": 1, "name": "Matemáticas" }, ... ],
+  "logs": [ { "id": 1, "action": "login", "user": "Juan Pérez", "date": "2025-10-10" }, ... ],
+  "stats": { "totalUsers": 3, "totalSubjects": 2, "totalLogs": 2 }
+}
+```
+
+### Director
+**Petición:**
+```http
+GET /api/director/secure-data
+Authorization: Bearer <token>
+```
+**Respuesta:**
+```json
+{
+  "message": "Acceso concedido solo a director",
+  "academicReports": [ { "course": "10A", "subject": "Matemáticas", "period": "2025-2", "average": 4.2, "students": 30 }, ... ],
+  "teacherPerformance": [ { "teacher": "Ana Gómez", "subject": "Matemáticas", "average": 4.5 }, ... ],
+  "downloadLinks": { "csv": "/api/director/report.csv", "pdf": "/api/director/report.pdf" }
+}
+```
+
+### Profesor
+**Petición:**
+```http
+GET /api/teacher/secure-data
+Authorization: Bearer <token>
+```
+**Respuesta:**
+```json
+{
+  "message": "Acceso concedido solo a docente",
+  "grades": [ { "student": "Luis Torres", "subject": "Matemáticas", "grade": 4.8, "lastModified": "2025-10-09" }, ... ],
+  "history": [ { "student": "Luis Torres", "action": "edit", "oldGrade": 4.5, "newGrade": 4.8, "date": "2025-10-09" } ],
+  "average": 4.35
+}
+```
+
+### Estudiante
+**Petición:**
+```http
+GET /api/student/secure-data
+Authorization: Bearer <token>
+```
+**Respuesta:**
+```json
+{
+  "message": "Acceso concedido solo a estudiante",
+  "subjects": [ { "name": "Matemáticas", "grade": 4.8 }, { "name": "Lengua", "grade": 3.9 } ],
+  "average": 4.35,
+  "messages": [ { "from": "Ana Gómez", "subject": "Matemáticas", "message": "Buen trabajo en el último examen." } ],
+  "exportLinks": { "csv": "/api/student/grades.csv", "pdf": "/api/student/grades.pdf" }
+}
+```
