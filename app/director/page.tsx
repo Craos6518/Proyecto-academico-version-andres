@@ -31,25 +31,19 @@ export default function DirectorDashboard() {
     }
     setUser(currentUser)
 
-    // Calculate institutional stats
-    const users = apiClient.getUsers()
-    const subjects = apiClient.getSubjects()
-    const grades = apiClient.getGrades()
-    const students = users.filter((u) => u.roleName === "Estudiante")
-
-    // Calculate average grade
-    const averageGrade = grades.length > 0 ? grades.reduce((sum, g) => sum + g.score, 0) / grades.length : 0
-
-    const approvedGrades = grades.filter((g) => g.score >= 3.0).length
-    const approvalRate = grades.length > 0 ? (approvedGrades / grades.length) * 100 : 0
-
-    setStats({
-      totalStudents: students.length,
-      totalTeachers: users.filter((u) => u.roleName === "Profesor").length,
-      totalSubjects: subjects.length,
-      averageGrade: Math.round(averageGrade * 10) / 10,
-      approvalRate: Math.round(approvalRate * 10) / 10,
-    })
+    // Fetch director stats from server (Supabase)
+    fetch("/api/director/stats")
+      .then((r) => r.json())
+      .then((data) => {
+        setStats({
+          totalStudents: data.totalStudents,
+          totalTeachers: data.totalTeachers,
+          totalSubjects: data.totalSubjects,
+          averageGrade: data.averageGrade,
+          approvalRate: data.approvalRate,
+        })
+      })
+      .catch((err) => console.error("Failed to load director stats", err))
   }, [router])
 
   if (!user) return null

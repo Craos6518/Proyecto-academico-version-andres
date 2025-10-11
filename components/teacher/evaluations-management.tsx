@@ -46,17 +46,23 @@ export function EvaluationsManagement({ teacherId }: EvaluationsManagementProps)
   })
 
   useEffect(() => {
-    loadData()
+    ;(async () => {
+      try {
+        const subjectsRes = await fetch(`/api/admin/subjects?teacherId=${teacherId}`)
+        if (!subjectsRes.ok) throw new Error("Error fetching subjects")
+        const teacherSubjects = await subjectsRes.json()
+        setSubjects(teacherSubjects)
+
+        const assignsRes = await fetch(`/api/teacher/assignments`)
+        if (!assignsRes.ok) throw new Error("Error fetching assignments")
+        const allAssignments = await assignsRes.json()
+        const teacherAssignments = allAssignments.filter((a: any) => teacherSubjects.some((s: any) => s.id === a.subjectId))
+        setAssignments(teacherAssignments)
+      } catch (err) {
+        console.error(err)
+      }
+    })()
   }, [teacherId])
-
-  const loadData = () => {
-    const teacherSubjects = apiClient.getSubjectsByTeacher(teacherId)
-    setSubjects(teacherSubjects)
-
-    const allAssignments = apiClient.getAssignments()
-    const teacherAssignments = allAssignments.filter((a) => teacherSubjects.some((s) => s.id === a.subjectId))
-    setAssignments(teacherAssignments)
-  }
 
   const filteredAssignments =
     selectedSubject === "all" ? assignments : assignments.filter((a) => a.subjectId === selectedSubject)
@@ -119,20 +125,52 @@ export function EvaluationsManagement({ teacherId }: EvaluationsManagementProps)
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (editingAssignment) {
-      apiClient.updateAssignment(editingAssignment.id, formData)
-    } else {
-      apiClient.createAssignment(formData)
-    }
+    ;(async () => {
+      try {
+        if (editingAssignment) {
+          const res = await fetch(`/api/teacher/assignments`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id: editingAssignment.id, ...formData }),
+          })
+          if (!res.ok) throw new Error("Error updating assignment")
+        } else {
+          const res = await fetch(`/api/teacher/assignments`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(formData),
+          })
+          if (!res.ok) throw new Error("Error creating assignment")
+        }
 
-    loadData()
-    setIsDialogOpen(false)
+        // reload
+        const assignsRes = await fetch(`/api/teacher/assignments`)
+        const allAssignments = await assignsRes.json()
+        const teacherAssignments = allAssignments.filter((a: any) => subjects.some((s) => s.id === a.subjectId))
+        setAssignments(teacherAssignments)
+        setIsDialogOpen(false)
+      } catch (err) {
+        console.error(err)
+        alert("Error al guardar la evaluación")
+      }
+    })()
   }
 
   const handleDelete = (id: number) => {
     if (confirm("¿Estás seguro de eliminar esta evaluación?")) {
-      apiClient.deleteAssignment(id)
-      loadData()
+      ;(async () => {
+        try {
+          const res = await fetch(`/api/teacher/assignments?id=${id}`, { method: "DELETE" })
+          if (!res.ok) throw new Error("Error deleting assignment")
+          const assignsRes = await fetch(`/api/teacher/assignments`)
+          const allAssignments = await assignsRes.json()
+          const teacherAssignments = allAssignments.filter((a: any) => subjects.some((s) => s.id === a.subjectId))
+          setAssignments(teacherAssignments)
+        } catch (err) {
+          console.error(err)
+          alert("No se pudo eliminar la evaluación")
+        }
+      })()
     }
   }
 

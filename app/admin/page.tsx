@@ -30,15 +30,18 @@ export default function AdminDashboard() {
     }
     setUser(currentUser)
 
-    // Calculate stats
-    const users = apiClient.getUsers()
-    const subjects = apiClient.getSubjects()
-    setStats({
-      totalUsers: users.length,
-      totalSubjects: subjects.length,
-      totalStudents: users.filter((u) => u.roleName === "Estudiante").length,
-      totalTeachers: users.filter((u) => u.roleName === "Profesor").length,
-    })
+    // Fetch stats from server (Supabase)
+    fetch("/api/admin/stats")
+      .then((r) => r.json())
+      .then((data) => {
+        setStats({
+          totalUsers: data.totalUsers,
+          totalSubjects: data.totalSubjects,
+          totalStudents: data.totalStudents,
+          totalTeachers: data.totalTeachers,
+        })
+      })
+      .catch((err) => console.error("Failed to load stats", err))
   }, [router])
 
   if (!user) return null

@@ -3,6 +3,7 @@
 import { apiClient } from "./api-client"
 import type { User } from "./mock-data"
 import jwt from "jsonwebtoken"
+import { supabaseApiClient } from "./supabase-api-client"
 
 const AUTH_STORAGE_KEY = "academic_auth_user"
 
@@ -39,6 +40,7 @@ export function verifyJWT(token: string): null | { id: string; username: string;
 }
 
 export const authService = {
+  // Legacy sync login (kept for compatibility with parts of the app that still use it)
   login: (username: string, password: string): AuthUser | null => {
     const users = apiClient.getUsers()
     const user = users.find((u) => u.username === username)
@@ -60,12 +62,14 @@ export const authService = {
     return null
   },
 
+  // Logout local
   logout: () => {
     if (typeof window !== "undefined") {
       localStorage.removeItem(AUTH_STORAGE_KEY)
     }
   },
 
+  // Legacy sync getter
   getCurrentUser: (): AuthUser | null => {
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem(AUTH_STORAGE_KEY)
@@ -96,4 +100,47 @@ export const authService = {
       localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(updatedUser))
     }
   },
+
+  // New async methods that use Supabase (server/async flows)
+  loginAsync: async (username: string, password: string) => {
+    return await loginWithSupabase(username, password)
+  },
+
+  getCurrentUserAsync: async (idOrEmail: number | string) => {
+    // Busca por id o por email según tipo
+    if (!idOrEmail) return null
+    try {
+      if (typeof idOrEmail === "number") {
+        return await supabaseApiClient.getUserById(idOrEmail as number)
+      }
+      // por email
+      const users = await supabaseApiClient.getUsers()
+      return users.find((u) => u.email === idOrEmail) ?? null
+    } catch (err) {
+      console.error("getCurrentUserAsync error:", err)
+      return null
+    }
+  },
+}
+
+// Nueva función async para login usando Supabase como fuente de usuarios.
+// No reemplaza automáticamente el `authService.login` para evitar romper consumidores.
+export async function loginWithSupabase(username: string, password: string) {
+  const users = await supabaseApiClient.getUsers()
+  const user = users.find((u) => u.username === username)
+
+  if (user && user.password === password) {
+    const authUser = {
+      ...user,
+      token: `supabase_token_${user.id}_${Date.now()}`,
+    }
+
+    if (typeof window !== "undefined") {
+      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(authUser))
+    }
+
+    return authUser
+  }
+
+  return null
 }

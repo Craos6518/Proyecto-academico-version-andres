@@ -17,7 +17,6 @@ import {
 } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { apiClient } from "@/lib/api-client"
 import type { Enrollment, User, Subject } from "@/lib/mock-data"
 import { Trash2, Search, UserPlus } from "lucide-react"
 
@@ -37,21 +36,37 @@ export function EnrollmentsManagement() {
   useEffect(() => {
     loadData()
   }, [])
+  const loadData = async () => {
+    try {
+      const [enrollRes, usersRes, subjectsRes] = await Promise.all([
+        fetch("/api/admin/enrollments"),
+        fetch("/api/admin/users"),
+        fetch("/api/admin/subjects"),
+      ])
 
-  const loadData = () => {
-    const allEnrollments = apiClient.getEnrollments()
-    const allStudents = apiClient.getUsers().filter((u) => u.roleName === "Estudiante")
-    const allSubjects = apiClient.getSubjects()
+      if (!enrollRes.ok || !usersRes.ok || !subjectsRes.ok) {
+        throw new Error("Error fetching data")
+      }
 
-    setEnrollments(allEnrollments)
-    setStudents(allStudents)
-    setSubjects(allSubjects)
+      const allEnrollments: Enrollment[] = await enrollRes.json()
+      const allUsers: User[] = await usersRes.json()
+      const allSubjects: Subject[] = await subjectsRes.json()
 
-    if (allStudents.length > 0) {
-      setFormData((prev) => ({ ...prev, studentId: allStudents[0].id }))
-    }
-    if (allSubjects.length > 0) {
-      setFormData((prev) => ({ ...prev, subjectId: allSubjects[0].id }))
+      const allStudents = allUsers.filter((u) => u.roleName === "Estudiante" || u.roleName === "estudiante")
+
+      setEnrollments(allEnrollments)
+      setStudents(allStudents)
+      setSubjects(allSubjects)
+
+      if (allStudents.length > 0) {
+        setFormData((prev) => ({ ...prev, studentId: allStudents[0].id }))
+      }
+      if (allSubjects.length > 0) {
+        setFormData((prev) => ({ ...prev, subjectId: allSubjects[0].id }))
+      }
+    } catch (err) {
+      console.error(err)
+      alert("No se pudo cargar la información de inscripciones. Revisa la consola.")
     }
   }
 
@@ -80,29 +95,53 @@ export function EnrollmentsManagement() {
     e.preventDefault()
 
     // Check if enrollment already exists
-    const exists = enrollments.some((e) => e.studentId === formData.studentId && e.subjectId === formData.subjectId)
+    const exists = enrollments.some((en) => en.studentId === formData.studentId && en.subjectId === formData.subjectId)
 
     if (exists) {
       alert("Este estudiante ya está inscrito en esta materia")
       return
     }
 
-    apiClient.createEnrollment({
-      studentId: formData.studentId,
-      subjectId: formData.subjectId,
-      enrollmentDate: new Date().toISOString(),
-      status: formData.status,
-    })
+    ;(async () => {
+      try {
+        const res = await fetch("/api/admin/enrollments", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            studentId: formData.studentId,
+            subjectId: formData.subjectId,
+            enrollmentDate: new Date().toISOString(),
+            status: formData.status,
+          }),
+        })
 
-    loadData()
-    setIsDialogOpen(false)
-    resetForm()
+        if (!res.ok) {
+          const err = await res.text()
+          throw new Error(err || "Error creating enrollment")
+        }
+
+        await loadData()
+        setIsDialogOpen(false)
+        resetForm()
+      } catch (err) {
+        console.error(err)
+        alert("No se pudo crear la inscripción. Revisa la consola.")
+      }
+    })()
   }
 
   const handleDelete = (id: number) => {
     if (confirm("¿Estás seguro de eliminar esta inscripción?")) {
-      apiClient.deleteEnrollment(id)
-      loadData()
+      ;(async () => {
+        try {
+          const res = await fetch(`/api/admin/enrollments?id=${id}`, { method: "DELETE" })
+          if (!res.ok) throw new Error("Error deleting enrollment")
+          await loadData()
+        } catch (err) {
+          console.error(err)
+          alert("No se pudo eliminar la inscripción. Revisa la consola.")
+        }
+      })()
     }
   }
 

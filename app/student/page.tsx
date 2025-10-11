@@ -28,30 +28,18 @@ export default function StudentDashboard() {
     }
     setUser(currentUser)
 
-    // Calculate student stats
-    const enrollments = apiClient.getEnrollmentsByStudent(currentUser.id)
-    const grades = apiClient.getGradesByStudent(currentUser.id)
-
-    if (grades.length > 0) {
-      const scores = grades.map((g) => g.score)
-      const average = scores.reduce((sum, score) => sum + score, 0) / scores.length
-      const highest = Math.max(...scores)
-      const lowest = Math.min(...scores)
-
-      setStats({
-        enrolledSubjects: enrollments.length,
-        averageGrade: Math.round(average * 10) / 10,
-        highestGrade: highest,
-        lowestGrade: lowest,
+    // Fetch student stats from server (Supabase)
+    fetch(`/api/student/stats?studentId=${currentUser.id}`)
+      .then((r) => r.json())
+      .then((data) => {
+        setStats({
+          enrolledSubjects: data.enrolledSubjects,
+          averageGrade: data.averageGrade,
+          highestGrade: data.highestGrade,
+          lowestGrade: data.lowestGrade,
+        })
       })
-    } else {
-      setStats({
-        enrolledSubjects: enrollments.length,
-        averageGrade: 0,
-        highestGrade: 0,
-        lowestGrade: 0,
-      })
-    }
+      .catch((err) => console.error("Failed to load student stats", err))
   }, [router])
 
   if (!user) return null

@@ -52,7 +52,10 @@ export function UsersManagement() {
   }, [])
 
   const loadUsers = () => {
-    setUsers(apiClient.getUsers())
+    fetch('/api/admin/users')
+      .then((r) => r.json())
+      .then((data) => setUsers(data || []))
+      .catch((err) => console.error('Failed to load users', err))
   }
 
   const availableRoles = isDirector ? mockRoles.filter((role) => role.name !== "Administrador") : mockRoles
@@ -72,26 +75,31 @@ export function UsersManagement() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-
-    if (editingUser) {
-      const role = mockRoles.find((r) => r.id === formData.roleId)
-      apiClient.updateUser(editingUser.id, {
-        ...formData,
-        roleName: role?.name || "Estudiante",
-      })
-    } else {
-      const role = mockRoles.find((r) => r.id === formData.roleId)
-      apiClient.createUser({
-        ...formData,
-        password: "demo123",
-        roleName: role?.name || "Estudiante",
-        isActive: true,
-      })
+    const role = mockRoles.find((r) => r.id === formData.roleId)
+    const payload = {
+      ...formData,
+      roleName: role?.name || "Estudiante",
+      password: editingUser ? undefined : "demo123",
+      isActive: true,
     }
 
-    loadUsers()
-    setIsDialogOpen(false)
-    resetForm()
+    if (editingUser) {
+      fetch('/api/admin/users', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: editingUser.id, ...payload }) })
+        .then(() => {
+          loadUsers()
+          setIsDialogOpen(false)
+          resetForm()
+        })
+        .catch((err) => console.error('Failed to update user', err))
+    } else {
+      fetch('/api/admin/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+        .then(() => {
+          loadUsers()
+          setIsDialogOpen(false)
+          resetForm()
+        })
+        .catch((err) => console.error('Failed to create user', err))
+    }
   }
 
   const handleEdit = (user: User) => {
@@ -108,8 +116,9 @@ export function UsersManagement() {
 
   const handleDelete = (id: number) => {
     if (confirm("¿Estás seguro de eliminar este usuario?")) {
-      apiClient.deleteUser(id)
-      loadUsers()
+      fetch(`/api/admin/users?id=${id}`, { method: 'DELETE' })
+        .then(() => loadUsers())
+        .catch((err) => console.error('Failed to delete user', err))
     }
   }
 
@@ -134,15 +143,15 @@ export function UsersManagement() {
       return
     }
 
-    const result = await changeUserPassword(currentUser.id, currentUser.roleName, editingUser.id, newPassword)
-
-    if (result.success) {
+    try {
+      await fetch('/api/admin/users', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: editingUser.id, password: newPassword }) })
       setPasswordSuccess(true)
       setNewPassword("")
       setConfirmPassword("")
       setTimeout(() => setPasswordSuccess(false), 3000)
-    } else {
-      setPasswordError(result.error || "Error al cambiar la contraseña")
+    } catch (err) {
+      console.error('Failed to change password', err)
+      setPasswordError('Error al cambiar la contraseña')
     }
   }
 

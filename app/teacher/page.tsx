@@ -50,55 +50,19 @@ export default function TeacherDashboard() {
     }
     setUser(currentUser)
 
-    // Calculate teacher stats
-    const subjects = apiClient.getSubjectsByTeacher(currentUser.id)
-    const enrollments = apiClient.getEnrollments()
-    const grades = apiClient.getGrades()
-    const assignments = apiClient.getAssignments()
-
-    const mySubjectIds = subjects.map((s) => s.id)
-    const studentsInMySubjects = enrollments.filter((e) => mySubjectIds.includes(e.subjectId))
-    const gradesInMySubjects = grades.filter((g) => mySubjectIds.includes(g.subjectId))
-
-    let averageGrade = 0
-    if (gradesInMySubjects.length > 0) {
-      const sum = gradesInMySubjects.reduce((acc, g) => acc + (g.score || 0), 0)
-      averageGrade = sum / gradesInMySubjects.length
-      averageGrade = Math.round(averageGrade * 10) / 10
-    }
-
-    const pendingItems: PendingGradeItem[] = []
-    let totalPendingCount = 0
-
-    for (const subject of subjects) {
-      const subjectAssignments = assignments.filter((a) => a.subjectId === subject.id)
-      const subjectEnrollments = enrollments.filter((e) => e.subjectId === subject.id)
-
-      for (const assignment of subjectAssignments) {
-        const assignmentGrades = grades.filter((g) => g.assignmentId === assignment.id)
-        const studentsWithoutGrade = subjectEnrollments.length - assignmentGrades.length
-
-        if (studentsWithoutGrade > 0) {
-          pendingItems.push({
-            assignmentId: assignment.id,
-            assignmentName: assignment.name,
-            subjectName: subject.name,
-            dueDate: assignment.dueDate,
-            studentsWithoutGrade,
-          })
-          totalPendingCount += studentsWithoutGrade
-        }
-      }
-    }
-
-    setPendingGradesDetails(pendingItems)
-
-    setStats({
-      mySubjects: subjects.length,
-      totalStudents: new Set(studentsInMySubjects.map((s) => s.studentId)).size,
-      pendingGrades: totalPendingCount,
-      averageGrade: isNaN(averageGrade) ? 0 : averageGrade,
-    })
+    // Fetch teacher stats from server (Supabase)
+    fetch(`/api/teacher/stats?teacherId=${currentUser.id}`)
+      .then((r) => r.json())
+      .then((data) => {
+        setStats({
+          mySubjects: data.mySubjects,
+          totalStudents: data.totalStudents,
+          pendingGrades: data.pendingGrades,
+          averageGrade: data.averageGrade,
+        })
+        setPendingGradesDetails(data.pendingDetails || [])
+      })
+      .catch((err) => console.error("Failed to load teacher stats", err))
   }, [router])
 
   if (!user) return null

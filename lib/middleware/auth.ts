@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next"
 import { verifyJWT } from "../../lib/auth"
+import { supabaseAdmin } from "../supabase-client"
 
 // Middleware para proteger rutas y verificar roles
 export function withAuth(handler: Function, allowedRoles: string[] = []) {
@@ -13,18 +14,36 @@ export function withAuth(handler: Function, allowedRoles: string[] = []) {
       return res.status(401).json({ error: "Token no proporcionado" })
     }
 
+    // Intentamos verificar el JWT local (generado por generateJWT)
     const payload = verifyJWT(token)
-    if (!payload) {
+    if (payload) {
+      if (allowedRoles.length > 0 && !allowedRoles.includes(payload.role)) {
+        return res.status(403).json({ error: "No tienes permisos para acceder a esta ruta" })
+      }
+      ;(req as any).user = payload
+      return handler(req, res)
+    }
+
+    // Fallback: si es un token de Supabase (access token), tratamos de obtener el usuario
+    try {
+      const { data: sbUser, error } = await supabaseAdmin.auth.getUser(token)
+      if (error || !sbUser) {
+        return res.status(401).json({ error: "Token inválido o expirado" })
+      }
+
+      // Obtenemos info adicional desde la tabla users
+      const { data: dbUser } = await supabaseAdmin.from("users").select("*").eq("email", sbUser.user?.email).limit(1).maybeSingle()
+      const role = (dbUser as any)?.roleName ?? (dbUser as any)?.role_name ?? ""
+
+      if (allowedRoles.length > 0 && role && !allowedRoles.includes(role.toLowerCase())) {
+        return res.status(403).json({ error: "No tienes permisos para acceder a esta ruta" })
+      }
+
+      ;(req as any).user = { id: sbUser.user?.id, email: sbUser.user?.email, role }
+      return handler(req, res)
+    } catch (err) {
+      console.error("Auth middleware error:", err)
       return res.status(401).json({ error: "Token inválido o expirado" })
     }
-
-    // Verificación de roles si se especifican
-    if (allowedRoles.length > 0 && !allowedRoles.includes(payload.role)) {
-      return res.status(403).json({ error: "No tienes permisos para acceder a esta ruta" })
-    }
-
-    // Adjunta el usuario al request para uso posterior
-    (req as any).user = payload
-    return handler(req, res)
   }
 }
