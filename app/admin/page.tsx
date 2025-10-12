@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { authService } from "@/lib/auth"
+import { authService, type AuthUser } from "@/lib/auth"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -13,24 +13,24 @@ import { Users, BookOpen, GraduationCap, BarChart3 } from "lucide-react"
 import { apiClient } from "@/lib/api-client"
 
 export default function AdminDashboard() {
-  const router = useRouter()
-  const [user, setUser] = useState(authService.getCurrentUser())
+  const router = useRouter();
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [stats, setStats] = useState({
     totalUsers: 0,
     totalSubjects: 0,
     totalStudents: 0,
     totalTeachers: 0,
-  })
+  });
+  const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
-    const currentUser = authService.getCurrentUser()
+    setIsMounted(true);
+    const currentUser = authService.getCurrentUser();
     if (!currentUser || currentUser.roleName !== "Administrador") {
-      router.push("/")
-      return
+      router.push("/");
+      return;
     }
-    setUser(currentUser)
-
-    // Fetch stats from server (Supabase)
+    setUser(currentUser);
     fetch("/api/admin/stats")
       .then((r) => r.json())
       .then((data) => {
@@ -39,12 +39,12 @@ export default function AdminDashboard() {
           totalSubjects: data.totalSubjects,
           totalStudents: data.totalStudents,
           totalTeachers: data.totalTeachers,
-        })
+        });
       })
-      .catch((err) => console.error("Failed to load stats", err))
-  }, [router])
+      .catch((err) => console.error("Failed to load stats", err));
+  }, [router]);
 
-  if (!user) return null
+  if (!isMounted || !user) return null;
 
   return (
     <DashboardLayout user={user} title="Panel de Administración">
@@ -60,7 +60,6 @@ export default function AdminDashboard() {
               <div className="text-2xl font-bold">{stats.totalUsers}</div>
             </CardContent>
           </Card>
-
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">Materias</CardTitle>
@@ -70,7 +69,6 @@ export default function AdminDashboard() {
               <div className="text-2xl font-bold">{stats.totalSubjects}</div>
             </CardContent>
           </Card>
-
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">Estudiantes</CardTitle>
@@ -80,7 +78,6 @@ export default function AdminDashboard() {
               <div className="text-2xl font-bold">{stats.totalStudents}</div>
             </CardContent>
           </Card>
-
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">Profesores</CardTitle>
@@ -91,7 +88,6 @@ export default function AdminDashboard() {
             </CardContent>
           </Card>
         </div>
-
         {/* Management Tabs */}
         <Card>
           <CardHeader>
@@ -119,5 +115,5 @@ export default function AdminDashboard() {
         </Card>
       </div>
     </DashboardLayout>
-  )
+  );
 }

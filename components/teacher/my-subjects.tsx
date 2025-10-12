@@ -53,8 +53,9 @@ export function MySubjects({ teacherId }: MySubjectsProps) {
         const students = enrollments
           .map((en: any) => allUsers.find((u) => u.id === en.studentId))
           .filter((s): s is User => s !== undefined && s !== null)
-
-        setEnrolledStudents(students)
+        // Eliminar duplicados por id
+        const uniqueStudents = students.filter((s, idx, arr) => arr.findIndex(u => u.id === s.id) === idx)
+        setEnrolledStudents(uniqueStudents)
         setAssignments(assignmentsData)
         setDialogOpen(true)
       } catch (err) {

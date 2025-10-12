@@ -1,0 +1,95 @@
+import type { NextApiRequest, NextApiResponse } from "next"
+import { supabaseAdmin } from "../../../lib/supabase-client"
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  try {
+    if (req.method === "GET") {
+      const { subjectId } = req.query
+      let query = supabaseAdmin.from("assignments").select("*")
+      if (subjectId) {
+        query = query.eq("subject_id", subjectId)
+      }
+      const { data, error } = await query
+      if (error) throw error
+      const mapped = (data || []).map((row: any) => ({
+        id: row.id,
+        subjectId: row.subject_id ?? row.subjectId,
+        name: row.name,
+        description: row.description,
+        assignmentType: row.assignment_type ?? row.assignmentType,
+        maxScore: row.max_score ?? row.maxScore,
+        weight: row.weight,
+        dueDate: row.due_date ?? row.dueDate,
+      }))
+      return res.status(200).json(mapped)
+    }
+
+    if (req.method === "POST") {
+      const payload = req.body
+      const dbPayload = {
+        subject_id: payload.subjectId,
+        name: payload.name,
+        description: payload.description,
+        assignment_type: payload.assignmentType,
+        max_score: payload.maxScore,
+        weight: payload.weight,
+        due_date: payload.dueDate,
+      }
+      const { data, error } = await supabaseAdmin.from("assignments").insert(dbPayload).select().limit(1).single()
+      if (error) throw error
+      const row = data
+      const mapped = {
+        id: row.id,
+        subjectId: row.subject_id ?? row.subjectId,
+        name: row.name,
+        description: row.description,
+        assignmentType: row.assignment_type ?? row.assignmentType,
+        maxScore: row.max_score ?? row.maxScore,
+        weight: row.weight,
+        dueDate: row.due_date ?? row.dueDate,
+      }
+      return res.status(201).json(mapped)
+    }
+
+    if (req.method === "PUT") {
+      const { id, ...updates } = req.body
+      if (!id) return res.status(400).json({ error: "Missing id" })
+      const dbUpdates: any = {}
+      if (updates.subjectId !== undefined) dbUpdates.subject_id = updates.subjectId
+      if (updates.name !== undefined) dbUpdates.name = updates.name
+      if (updates.description !== undefined) dbUpdates.description = updates.description
+      if (updates.assignmentType !== undefined) dbUpdates.assignment_type = updates.assignmentType
+      if (updates.maxScore !== undefined) dbUpdates.max_score = updates.maxScore
+      if (updates.weight !== undefined) dbUpdates.weight = updates.weight
+      if (updates.dueDate !== undefined) dbUpdates.due_date = updates.dueDate
+
+      const { data, error } = await supabaseAdmin.from("assignments").update(dbUpdates).eq("id", id).select().limit(1).single()
+      if (error) throw error
+      const row = data
+      const mapped = {
+        id: row.id,
+        subjectId: row.subject_id ?? row.subjectId,
+        name: row.name,
+        description: row.description,
+        assignmentType: row.assignment_type ?? row.assignmentType,
+        maxScore: row.max_score ?? row.maxScore,
+        weight: row.weight,
+        dueDate: row.due_date ?? row.dueDate,
+      }
+      return res.status(200).json(mapped)
+    }
+
+    if (req.method === "DELETE") {
+      const { id } = req.query
+      if (!id) return res.status(400).json({ error: "Missing id" })
+      const { error } = await supabaseAdmin.from("assignments").delete().eq("id", Number(id))
+      if (error) throw error
+      return res.status(204).end()
+    }
+
+    return res.status(405).json({ error: "Method not allowed" })
+  } catch (err: any) {
+    console.error("admin/assignments error:", err)
+    return res.status(500).json({ error: err.message || "Error interno" })
+  }
+}
