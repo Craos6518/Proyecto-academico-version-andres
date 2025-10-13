@@ -21,7 +21,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         roleName:
           row.role_name ?? row.roleName ?? row.role ?? (rolesMap[row.role_id] ? rolesMap[row.role_id].name : ""),
         isActive: row.is_active ?? row.isActive ?? true,
-        password: row.password ?? "",
       }))
       return res.status(200).json(mapped)
     }
@@ -30,6 +29,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const payload = req.body
       // Accept camelCase from client, convert to snake_case for DB
       const dbPayload = {
+        id: payload.id ?? undefined,
         username: payload.username,
         email: payload.email,
         first_name: payload.firstName,
@@ -37,7 +37,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         role_id: payload.roleId,
         role_name: payload.roleName,
         is_active: payload.isActive,
-        password: payload.password,
+        password: payload.password ?? "demo123",
       }
       const { data, error } = await supabaseAdmin.from("users").insert(dbPayload).select().limit(1).single()
       if (error) throw error
@@ -51,7 +51,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         roleId: row.role_id ?? row.roleId ?? null,
         roleName: row.role_name ?? row.roleName ?? row.role ?? "",
         isActive: row.is_active ?? row.isActive ?? true,
-        password: row.password ?? "",
       }
       return res.status(201).json(mapped)
     }
@@ -61,6 +60,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (!id) return res.status(400).json({ error: "Missing id" })
       // convert camelCase updates to snake_case DB columns
       const dbUpdates: any = {}
+      if (updates.username !== undefined) dbUpdates.username = updates.username
       if (updates.firstName !== undefined) dbUpdates.first_name = updates.firstName
       if (updates.lastName !== undefined) dbUpdates.last_name = updates.lastName
       if (updates.roleId !== undefined) dbUpdates.role_id = updates.roleId
@@ -81,7 +81,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         roleId: row.role_id ?? row.roleId ?? null,
         roleName: row.role_name ?? row.roleName ?? row.role ?? "",
         isActive: row.is_active ?? row.isActive ?? true,
-        password: row.password ?? "",
       }
       return res.status(200).json(mapped)
     }

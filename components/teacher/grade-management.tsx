@@ -87,13 +87,33 @@ export function GradeManagement({ teacherId }: GradeManagementProps) {
           const assignmentsData: Assignment[] = await assignsRes.json()
           const allUsers: User[] = await usersRes.json()
 
+          // Mapeo robusto para soportar studentId/student_id y assignmentId/assignment_id
+          // Filtrar estudiantes únicos por ID
           const enrolledStudents = enrollments
-            .map((e) => allUsers.find((u) => u.id === e.studentId))
-            .filter((u): u is User => !!u)
-
-          setStudents(enrolledStudents)
-          setGrades(gradesData)
-          setAssignments(assignmentsData)
+            .map((e) => {
+              const sid = e.studentId ?? e.student_id;
+              return allUsers.find((u) => u.id === sid);
+            })
+            .filter((u): u is User => !!u);
+          // Si no hay inscripciones, usar todos los usuarios con rol estudiante
+          const fallbackStudents = allUsers.filter((u) => u.roleName === "Estudiante" || u.role === "Estudiante");
+          const uniqueStudents = enrolledStudents.length > 0
+            ? Array.from(new Map(enrolledStudents.map((s) => [s.id, s])).values())
+            : fallbackStudents;
+          setStudents(uniqueStudents)
+          setGrades(
+            gradesData.map((g) => ({
+              ...g,
+              studentId: g.studentId ?? g.student_id,
+              assignmentId: g.assignmentId ?? g.assignment_id,
+            }))
+          );
+          setAssignments(
+            assignmentsData.map((a) => ({
+              ...a,
+              name: a.name ?? "Desconocido",
+            }))
+          );
 
           // Fetch final grades for each student in parallel
           const uniqueStudentIds = Array.from(new Set(enrolledStudents.map((s) => s.id)))
@@ -160,7 +180,13 @@ export function GradeManagement({ teacherId }: GradeManagementProps) {
         const gradesRes = await fetch(`/api/teacher/grades?subjectId=${selectedSubjectId}`)
         if (!gradesRes.ok) throw new Error("Error fetching grades")
         const gradesData: Grade[] = await gradesRes.json()
-        setGrades(gradesData)
+        setGrades(
+          gradesData.map((g) => ({
+            ...g,
+            studentId: g.studentId ?? g.student_id,
+            assignmentId: g.assignmentId ?? g.assignment_id,
+          }))
+        );
 
         setIsDialogOpen(false)
         resetForm()
@@ -211,12 +237,19 @@ export function GradeManagement({ teacherId }: GradeManagementProps) {
 
   const getStudentName = (studentId: number) => {
     const student = students.find((s) => s.id === studentId)
-    return student ? `${student.firstName} ${student.lastName}` : "Desconocido"
+    if (student) {
+      const name = `${student.firstName ?? ""} ${student.lastName ?? ""}`.trim();
+      return name !== "" ? name : student.username ?? "Desconocido";
+    }
+    return "Desconocido";
   }
 
   const getAssignmentName = (assignmentId: number) => {
     const assignment = assignments.find((a) => a.id === assignmentId)
-    return assignment ? assignment.name : "Desconocido"
+    if (assignment) {
+      return assignment.name ?? assignment.description ?? "Desconocido";
+    }
+    return "Desconocido";
   }
 
   const getAssignmentType = (assignmentId: number) => {

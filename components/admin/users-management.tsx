@@ -27,12 +27,66 @@ import { changeUserPassword } from "@/lib/actions/password"
 import { authService } from "@/lib/auth"
 
 export function UsersManagement() {
+  const handlePasswordChange = async () => {
+    if (newPassword.length < 6) {
+      setPasswordError("La contraseña debe tener al menos 6 caracteres");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError("Las contraseñas no coinciden");
+      return;
+    }
+    if (!editingUser) {
+      setPasswordError("No se pudo verificar el usuario actual");
+      return;
+    }
+    try {
+      const res = await fetch('/api/admin/users', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: editingUser.id, password: newPassword })
+      });
+      if (!res.ok) throw new Error('Error actualizando contraseña');
+      setPasswordSuccess(true);
+      setNewPassword("");
+      setConfirmPassword("");
+      setTimeout(() => setPasswordSuccess(false), 3000);
+      setPasswordError("");
+    } catch (err) {
+      console.error('Failed to change password', err);
+      setPasswordError('Error al cambiar la contraseña');
+    }
+  };
+
+  const handleDelete = async (userId: number) => {
+    if (userId === 1) return;
+    if (!window.confirm("¿Seguro que deseas eliminar este usuario?")) return;
+    try {
+      const res = await fetch(`/api/admin/users?id=${userId}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) throw new Error('Error eliminando usuario');
+      loadUsers();
+      alert('Usuario eliminado correctamente');
+    } catch (err) {
+      console.error('Failed to delete user', err);
+      alert('Error al eliminar el usuario');
+    }
+  };
   const [users, setUsers] = useState<User[]>([])
   const [searchTerm, setSearchTerm] = useState("")
   const [roleFilter, setRoleFilter] = useState<string>("all")
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingUser, setEditingUser] = useState<User | null>(null)
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    id: number | undefined;
+    username: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+    roleId: number;
+  }>({
+    id: undefined,
     username: "",
     email: "",
     firstName: "",
@@ -73,91 +127,57 @@ export function UsersManagement() {
       return matchesSearch && matchesRole
     })
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    const role = mockRoles.find((r) => r.id === formData.roleId)
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const role = mockRoles.find((r) => r.id === formData.roleId);
     const payload = {
       ...formData,
       roleName: role?.name || "Estudiante",
       password: editingUser ? undefined : "demo123",
       isActive: true,
-    }
-
-    if (editingUser) {
-      fetch('/api/admin/users', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: editingUser.id, ...payload }) })
-        .then(() => {
-          loadUsers()
-          setIsDialogOpen(false)
-          resetForm()
-        })
-        .catch((err) => console.error('Failed to update user', err))
-    } else {
-      fetch('/api/admin/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
-        .then(() => {
-          loadUsers()
-          setIsDialogOpen(false)
-          resetForm()
-        })
-        .catch((err) => console.error('Failed to create user', err))
+    };
+    try {
+      if (editingUser) {
+        const res = await fetch('/api/admin/users', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) throw new Error('Error actualizando usuario');
+      } else {
+        const res = await fetch('/api/admin/users', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) throw new Error('Error creando usuario');
+      }
+      loadUsers();
+      setIsDialogOpen(false);
+      setEditingUser(null);
+    } catch (err) {
+      console.error(err);
+      alert('Error al guardar el usuario');
     }
   }
 
   const handleEdit = (user: User) => {
-    setEditingUser(user)
+    setEditingUser(user);
     setFormData({
+      id: user.id,
       username: user.username,
       email: user.email,
       firstName: user.firstName,
       lastName: user.lastName,
       roleId: user.roleId,
-    })
-    setIsDialogOpen(true)
-  }
-
-  const handleDelete = (id: number) => {
-    if (confirm("¿Estás seguro de eliminar este usuario?")) {
-      fetch(`/api/admin/users?id=${id}`, { method: 'DELETE' })
-        .then(() => loadUsers())
-        .catch((err) => console.error('Failed to delete user', err))
-    }
-  }
-
-  const handlePasswordChange = async () => {
-    if (!editingUser) return
-
-    setPasswordError("")
-    setPasswordSuccess(false)
-
-    if (!newPassword || newPassword.length < 6) {
-      setPasswordError("La contraseña debe tener al menos 6 caracteres")
-      return
-    }
-
-    if (newPassword !== confirmPassword) {
-      setPasswordError("Las contraseñas no coinciden")
-      return
-    }
-
-    if (!currentUser) {
-      setPasswordError("No se pudo verificar el usuario actual")
-      return
-    }
-
-    try {
-      await fetch('/api/admin/users', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: editingUser.id, password: newPassword }) })
-      setPasswordSuccess(true)
-      setNewPassword("")
-      setConfirmPassword("")
-      setTimeout(() => setPasswordSuccess(false), 3000)
-    } catch (err) {
-      console.error('Failed to change password', err)
-      setPasswordError('Error al cambiar la contraseña')
-    }
+    });
+    setIsDialogOpen(true);
   }
 
   const resetForm = () => {
     setEditingUser(null)
     setFormData({
+      id: undefined,
       username: "",
       email: "",
       firstName: "",
@@ -236,11 +256,30 @@ export function UsersManagement() {
             <form onSubmit={handleSubmit}>
               <div className="space-y-4 py-4">
                 <div className="space-y-2">
+                  <Label htmlFor="id">ID</Label>
+                  <Input
+                    id="id"
+                    type="number"
+                    value={formData.id ?? ""}
+                    onChange={(e) => setFormData({ ...formData, id: e.target.value === "" ? undefined : Number(e.target.value) })}
+                    placeholder="ID único (entero)"
+                  />
+                </div>
+                <div className="space-y-2">
                   <Label htmlFor="username">Usuario</Label>
                   <Input
                     id="username"
                     value={formData.username}
                     onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="firstName">Nombre</Label>
+                  <Input
+                    id="firstName"
+                    value={formData.firstName}
+                    onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
                     required
                   />
                 </div>
@@ -253,26 +292,6 @@ export function UsersManagement() {
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                     required
                   />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="firstName">Nombre</Label>
-                    <Input
-                      id="firstName"
-                      value={formData.firstName}
-                      onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="lastName">Apellido</Label>
-                    <Input
-                      id="lastName"
-                      value={formData.lastName}
-                      onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
-                      required
-                    />
-                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="role">Rol</Label>
