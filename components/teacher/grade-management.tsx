@@ -104,8 +104,8 @@ export function GradeManagement({ teacherId }: GradeManagementProps) {
           setGrades(
             gradesData.map((g) => ({
               ...g,
-              studentId: g.studentId ?? g.student_id,
-              assignmentId: g.assignmentId ?? g.assignment_id,
+              studentId: (g as any).studentId ?? (g as any).student_id,
+              assignmentId: (g as any).assignmentId ?? (g as any).assignment_id,
             }))
           );
           setAssignments(
@@ -183,8 +183,8 @@ export function GradeManagement({ teacherId }: GradeManagementProps) {
         setGrades(
           gradesData.map((g) => ({
             ...g,
-            studentId: g.studentId ?? g.student_id,
-            assignmentId: g.assignmentId ?? g.assignment_id,
+            studentId: (g as any).studentId ?? (g as any).student_id,
+            assignmentId: (g as any).assignmentId ?? (g as any).assignment_id,
           }))
         );
 
