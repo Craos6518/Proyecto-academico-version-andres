@@ -1,8 +1,12 @@
 "use client"
 
-import { authService } from "@/lib/auth"
+import { authService } from "../auth"
 
-export async function changeOwnPassword(userId: number, currentPassword: string, newPassword: string) {
+export async function changeOwnPassword(
+  userId: number,
+  currentPassword: string,
+  newPassword: string
+): Promise<{ success: boolean; error?: string }> {
   try {
     // Call server to update password
     try {
