@@ -10,7 +10,7 @@ import { MySubjects } from "@/components/teacher/my-subjects"
 import { GradeManagement } from "@/components/teacher/grade-management"
 import { EvaluationsManagement } from "@/components/teacher/evaluations-management"
 import { BookOpen, Users, ClipboardList, TrendingUp } from "lucide-react"
-import { apiClient } from "@/lib/api-client"
+// importación eliminada: apiClient
 import {
   Dialog,
   DialogContent,

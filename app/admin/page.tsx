@@ -10,7 +10,7 @@ import { UsersManagement } from "@/components/admin/users-management"
 import { SubjectsManagement } from "@/components/admin/subjects-management"
 import { EnrollmentsManagement } from "@/components/admin/enrollments-management"
 import { Users, BookOpen, GraduationCap, BarChart3 } from "lucide-react"
-import { apiClient } from "@/lib/api-client"
+// importación eliminada: apiClient
 
 export default function AdminDashboard() {
   const router = useRouter();

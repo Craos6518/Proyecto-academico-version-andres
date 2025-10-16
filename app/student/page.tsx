@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { MyGrades } from "@/components/student/my-grades"
 import { MySubjectsList } from "@/components/student/my-subjects-list"
 import { BookOpen, TrendingUp, Award, AlertCircle } from "lucide-react"
-import { apiClient } from "@/lib/api-client"
+// importación eliminada: apiClient
 
 export default function StudentDashboard() {
   const router = useRouter()

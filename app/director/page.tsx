@@ -10,7 +10,7 @@ import { AcademicReports } from "@/components/director/academic-reports"
 import { PerformanceAnalytics } from "@/components/director/performance-analytics"
 import { UsersManagement } from "@/components/admin/users-management"
 import { Users, BookOpen, TrendingUp, Award, BarChart3 } from "lucide-react"
-import { apiClient } from "@/lib/api-client"
+// importación eliminada: apiClient
 
 export default function DirectorDashboard() {
   const router = useRouter()
