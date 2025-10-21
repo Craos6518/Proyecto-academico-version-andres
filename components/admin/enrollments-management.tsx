@@ -17,7 +17,8 @@ import {
 } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import type { Enrollment, User, Subject } from "@/lib/mock-data"
+import { normalizeRole } from "@/lib/auth"
+import type { Enrollment, User, Subject } from "@/lib/types"
 import { Trash2, Search, UserPlus } from "lucide-react"
 
 export function EnrollmentsManagement() {
@@ -52,7 +53,7 @@ export function EnrollmentsManagement() {
       const allUsers: User[] = await usersRes.json()
       const allSubjects: Subject[] = await subjectsRes.json()
 
-      const allStudents = allUsers.filter((u) => u.roleName === "Estudiante" || u.roleName === "estudiante")
+  const allStudents = allUsers.filter((u) => normalizeRole(u.role ?? u.roleName) === "student")
 
       setEnrollments(allEnrollments)
       setStudents(allStudents)

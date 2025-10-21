@@ -1,11 +1,10 @@
-"use client"
-
-import { apiClient } from "./api-client"
-import type { User } from "./mock-data"
+import type { User } from "./types"
+import bcrypt from "bcryptjs"
 import jwt from "jsonwebtoken"
 import { supabaseApiClient } from "./supabase-api-client"
 
 const AUTH_STORAGE_KEY = "academic_auth_user"
+const AUTH_TOKEN_KEY = "academic_auth_token"
 
 // Clave secreta para firmar los JWT (en producción usar variable de entorno)
 const JWT_SECRET = process.env.JWT_SECRET || "supersecretkey"
@@ -19,11 +18,14 @@ export interface AuthUser extends User {
 
 // Genera un JWT para el usuario
 export function generateJWT(user: User) {
+  // Normalizar rol antes de firmar
+  const rawRole = (user as any)?.role ?? (user as any)?.roleName ?? (user as any)?.role_name ?? ""
+  const roleKey = normalizeRole(rawRole)
   return jwt.sign(
     {
       id: user.id,
       username: user.username,
-      role: user.role,
+      role: roleKey,
     },
     JWT_SECRET,
     { expiresIn: JWT_EXPIRES_IN }
@@ -39,50 +41,35 @@ export function verifyJWT(token: string): null | { id: string; username: string;
   }
 }
 
+// Normaliza distintos nombres de rol (español/ingles/underscore) a claves canónicas
+export function normalizeRole(value: string | undefined | null): string {
+  if (!value) return ""
+  const v = String(value).trim().toLowerCase()
+  // mapeos comunes
+  if (["admin", "administrador", "administrador(a)", "administradorx"].includes(v)) return "admin"
+  if (["director", "direcctor", "head", "headmaster"].includes(v)) return "director"
+  if (["teacher", "profesor", "profesora", "docente", "profesor(a)"].includes(v)) return "teacher"
+  if (["student", "estudiante", "alumno", "alumna"].includes(v)) return "student"
+  // role_name snake_case or other forms
+  if (v === "role_admin" || v === "role_admin") return "admin"
+  // fallback: devuelve la cadena limpia (sin espacios)
+  return v
+}
+
 export const authService = {
   // Legacy sync login (kept for compatibility with parts of the app that still use it)
   login: (username: string, password: string): AuthUser | null => {
-    const users = apiClient.getUsers()
-    const user = users.find((u) => u.username === username)
-
-    if (user && user.password === password) {
-      const authUser: AuthUser = {
-        ...user,
-        token: `mock_token_${user.id}_${Date.now()}`,
-      }
-
-      // Store in localStorage
-      if (typeof window !== "undefined") {
-        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(authUser))
-      }
-
-      return authUser
-    }
-
+    // Legacy sync login removed: after migration use `loginAsync` / Supabase Auth.
     return null
   },
 
-  // Logout local
+  // Logout local (noop). Use Supabase Auth for real session management.
   logout: () => {
-    if (typeof window !== "undefined") {
-      localStorage.removeItem(AUTH_STORAGE_KEY)
-    }
+    return
   },
 
-  // Legacy sync getter
-  getCurrentUser: (): AuthUser | null => {
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem(AUTH_STORAGE_KEY)
-      if (stored) {
-        try {
-          return JSON.parse(stored)
-        } catch {
-          return null
-        }
-      }
-    }
-    return null
-  },
+  // Legacy sync getter (deprecated)
+  // (Legacy getter removed) use the persisted `getCurrentUser` implemented below which reads localStorage
 
   isAuthenticated: (): boolean => {
     return authService.getCurrentUser() !== null
@@ -94,10 +81,61 @@ export const authService = {
   },
 
   updateCurrentUser: (updates: Partial<User>): void => {
-    const currentUser = authService.getCurrentUser()
-    if (currentUser && typeof window !== "undefined") {
-      const updatedUser = { ...currentUser, ...updates }
-      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(updatedUser))
+    // noop: updates should be performed via supabaseApiClient.updateUser
+    return
+  },
+
+  // Persistencia en cliente (localStorage)
+  setCurrentUser: (user: AuthUser | null) => {
+    if (typeof window === "undefined") return
+    try {
+      if (!user) {
+        localStorage.removeItem(AUTH_STORAGE_KEY)
+      } else {
+        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user))
+      }
+    } catch (e) {
+      // noop
+    }
+  },
+
+  getCurrentUser: (): AuthUser | null => {
+    if (typeof window === "undefined") return null
+    try {
+      const raw = localStorage.getItem(AUTH_STORAGE_KEY)
+      if (!raw) return null
+      return JSON.parse(raw) as AuthUser
+    } catch (e) {
+      return null
+    }
+  },
+
+  setAuthToken: (token: string | null) => {
+    if (typeof window === "undefined") return
+    try {
+      if (!token) localStorage.removeItem(AUTH_TOKEN_KEY)
+      else localStorage.setItem(AUTH_TOKEN_KEY, token)
+    } catch (e) {
+      // noop
+    }
+  },
+
+  getAuthToken: (): string | null => {
+    if (typeof window === "undefined") return null
+    try {
+      return localStorage.getItem(AUTH_TOKEN_KEY)
+    } catch (e) {
+      return null
+    }
+  },
+
+  logoutClient: () => {
+    if (typeof window === "undefined") return
+    try {
+      localStorage.removeItem(AUTH_TOKEN_KEY)
+      localStorage.removeItem(AUTH_STORAGE_KEY)
+    } catch (e) {
+      // noop
     }
   },
 
@@ -126,21 +164,24 @@ export const authService = {
 // Nueva función async para login usando Supabase como fuente de usuarios.
 // No reemplaza automáticamente el `authService.login` para evitar romper consumidores.
 export async function loginWithSupabase(username: string, password: string) {
-  const users = await supabaseApiClient.getUsers()
-  const user = users.find((u) => u.username === username)
+  const user = await supabaseApiClient.getUserByUsername(username)
+  if (!user) return null
 
-  if (user && user.password === password) {
-    const authUser = {
-      ...user,
-      token: `supabase_token_${user.id}_${Date.now()}`,
-    }
+  const hash = (user as any).password_hash || (user as any).passwordHash || (user as any).password
+  if (!hash) return null
 
-    if (typeof window !== "undefined") {
-      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(authUser))
-    }
-
-    return authUser
+  try {
+    const match = bcrypt.compareSync(password, String(hash))
+    if (!match) return null
+  } catch (err) {
+    console.error("bcrypt compare error:", err)
+    return null
   }
 
-  return null
+  const authUser: AuthUser = {
+    ...user,
+    token: `supabase_token_${user.id}_${Date.now()}`,
+  }
+
+  return authUser
 }

@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next"
-import { verifyJWT } from "../../lib/auth"
+import { verifyJWT, normalizeRole } from "../../lib/auth"
 import { supabaseAdmin } from "../supabase-client"
 
 // Middleware para proteger rutas y verificar roles
@@ -17,7 +17,10 @@ export function withAuth(handler: Function, allowedRoles: string[] = []) {
     // Intentamos verificar el JWT local (generado por generateJWT)
     const payload = verifyJWT(token)
     if (payload) {
-      if (allowedRoles.length > 0 && !allowedRoles.includes(payload.role)) {
+      // normalizar roles permitidos para comparación
+      const allowed = allowedRoles.map((r) => String(r).toLowerCase())
+      const payloadRole = normalizeRole(payload.role)
+      if (allowed.length > 0 && payloadRole && !allowed.includes(payloadRole)) {
         return res.status(403).json({ error: "No tienes permisos para acceder a esta ruta" })
       }
       ;(req as any).user = payload
@@ -33,13 +36,15 @@ export function withAuth(handler: Function, allowedRoles: string[] = []) {
 
       // Obtenemos info adicional desde la tabla users
       const { data: dbUser } = await supabaseAdmin.from("users").select("*").eq("email", sbUser.user?.email).limit(1).maybeSingle()
-      const role = (dbUser as any)?.roleName ?? (dbUser as any)?.role_name ?? ""
+      const rawRole = (dbUser as any)?.roleName ?? (dbUser as any)?.role ?? (dbUser as any)?.role_name ?? ""
+      const role = normalizeRole(rawRole)
 
-      if (allowedRoles.length > 0 && role && !allowedRoles.includes(role.toLowerCase())) {
+      const allowed = allowedRoles.map((r) => String(r).toLowerCase())
+      if (allowed.length > 0 && role && !allowed.includes(role)) {
         return res.status(403).json({ error: "No tienes permisos para acceder a esta ruta" })
       }
 
-      ;(req as any).user = { id: sbUser.user?.id, email: sbUser.user?.email, role }
+      ;(req as any).user = { id: sbUser.user?.id, email: sbUser.user?.email, role, roleName: rawRole }
       return handler(req, res)
     } catch (err) {
       console.error("Auth middleware error:", err)

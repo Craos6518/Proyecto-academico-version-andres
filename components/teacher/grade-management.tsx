@@ -29,8 +29,9 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
+import { normalizeRole } from "@/lib/auth"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import type { Grade, Subject, User, Assignment } from "@/lib/mock-data"
+import type { Grade, Subject, User, Assignment } from "@/lib/types"
 import { Plus, Pencil, Calculator, Trash2, AlertCircle } from "lucide-react"
 
 interface GradeManagementProps {
@@ -96,7 +97,7 @@ export function GradeManagement({ teacherId }: GradeManagementProps) {
             })
             .filter((u): u is User => !!u);
           // Si no hay inscripciones, usar todos los usuarios con rol estudiante
-          const fallbackStudents = allUsers.filter((u) => u.roleName === "Estudiante" || u.role === "Estudiante");
+          const fallbackStudents = allUsers.filter((u) => normalizeRole(u.role ?? u.roleName) === "student");
           const uniqueStudents = enrolledStudents.length > 0
             ? Array.from(new Map(enrolledStudents.map((s) => [s.id, s])).values())
             : fallbackStudents;

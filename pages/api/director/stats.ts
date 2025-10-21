@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next"
 import { supabaseAdmin } from "../../../lib/supabase-client"
+import { normalizeRole } from '../../../lib/auth'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "GET") return res.status(405).json({ error: "Método no permitido" })
@@ -15,7 +16,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const subjects = subjectsRes.data ?? []
     const grades = gradesRes.data ?? []
 
-    const students = (users as any[]).filter((u) => (u.roleName ?? u.role_name) === "Estudiante")
+  const students = (users as any[]).filter((u) => normalizeRole(u.roleName ?? u.role ?? u.role_name) === 'student')
 
     const averageGrade = grades.length > 0 ? Math.round((grades.reduce((sum: number, g: any) => sum + Number(g.score || 0), 0) / grades.length) * 10) / 10 : 0
 
@@ -23,8 +24,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const approvalRate = grades.length > 0 ? Math.round((approvedGrades / grades.length) * 1000) / 10 : 0
 
     return res.status(200).json({
-      totalStudents: students.length,
-      totalTeachers: (users as any[]).filter((u) => (u.roleName ?? u.role_name) === "Profesor").length,
+  totalStudents: students.length,
+  totalTeachers: (users as any[]).filter((u) => normalizeRole(u.roleName ?? u.role ?? u.role_name) === 'teacher').length,
       totalSubjects: (subjects as any[]).length,
       averageGrade,
       approvalRate,

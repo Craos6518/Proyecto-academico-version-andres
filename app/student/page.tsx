@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { authService } from "@/lib/auth"
+import { authService, normalizeRole } from "@/lib/auth"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { MyGrades } from "@/components/student/my-grades"
@@ -22,7 +22,8 @@ export default function StudentDashboard() {
 
   useEffect(() => {
     const currentUser = authService.getCurrentUser()
-    if (!currentUser || currentUser.roleName !== "Estudiante") {
+
+    if (!currentUser || normalizeRole(currentUser.role ?? currentUser.roleName) !== "student") {
       router.push("/")
       return
     }
@@ -58,9 +59,8 @@ export default function StudentDashboard() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Materias Inscritas</CardTitle>
-              <BookOpen className="w-4 h-4 text-muted-foreground" />
-            </CardHeader>
+                <BookOpen className="w-4 h-4 text-muted-foreground" />
+              </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{stats.enrolledSubjects}</div>
             </CardContent>

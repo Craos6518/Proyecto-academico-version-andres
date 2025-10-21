@@ -14,21 +14,82 @@ export default withAuth(async (req: NextApiRequest, res: NextApiResponse) => {
 
   try {
     // Obtener materias inscritas y calificaciones
-    const [enrollRes, gradesRes, messagesRes] = await Promise.all([
-      supabaseAdmin.from("enrollments").select("subject_id, subjects(name)").eq("student_id", studentId),
-      supabaseAdmin.from("grades").select("subject_id, score, subjects(name)").eq("student_id", studentId),
-      supabaseAdmin.from("messages").select("from, subject, message").eq("student_id", studentId),
+    const [enrollRes, gradesRes] = await Promise.all([
+      // include subject description and teacher_id via related select
+      supabaseAdmin.from("enrollments").select("subject_id, subjects(id, name, description, teacher_id)").eq("student_id", studentId),
+      supabaseAdmin.from("grades").select("id, assignment_id, subject_id, score").eq("student_id", studentId),
     ])
 
-    const subjects = (enrollRes.data ?? []).map((e: any) => ({ name: e.subjects?.name || "", subject_id: e.subject_id }))
-  const grades = (gradesRes.data ?? []).map((g: any) => ({ name: g.subjects?.name || "", grade: Number(g.score), subject_id: g.subject_id }))
-    const messages = messagesRes.data ?? []
-
-    // Calcular promedio
-    let average = 0
-    if (grades.length > 0) {
-      average = Math.round((grades.reduce((acc, s) => acc + s.grade, 0) / grades.length) * 100) / 100
+    // Intentar obtener mensajes, pero manejar si la tabla no existe
+    let messages: any[] = []
+    try {
+      const messagesRes = await supabaseAdmin.from("messages").select("from, subject, message").eq("student_id", studentId)
+      if (!messagesRes.error && messagesRes.data) messages = messagesRes.data
+    } catch (e) {
+      // tabla messages posiblemente no exista; continuar sin bloquear
+      console.warn("messages table missing or query failed, continuing without messages", e)
+      messages = []
     }
+
+    const subjectsRaw = (enrollRes.data ?? [])
+    const gradesRaw = (gradesRes.data ?? [])
+
+    // Mapear calificaciones por subject_id para acceso rápido
+    const gradesMap: Record<number, number[]> = {}
+    const assignmentGradeMap: Record<number, number> = {}
+    ;(gradesRaw || []).forEach((g: any) => {
+      const sid = Number(g.subject_id)
+      if (!gradesMap[sid]) gradesMap[sid] = []
+      gradesMap[sid].push(Number(g.score))
+      if (g.assignment_id) assignmentGradeMap[g.assignment_id] = Number(g.score)
+    })
+
+    // Para cada materia inscrita, incluir la nota si existe (promedio si hay múltiples)
+    // collect subjectIds and teacherIds to fetch assignments and teachers
+    const subjectIds: number[] = (subjectsRaw || []).map((e: any) => Number(e.subject_id))
+    const teacherIds = Array.from(new Set((subjectsRaw || []).map((e: any) => Number(e.subjects?.teacher_id)).filter(Boolean)))
+
+    // fetch teacher data
+    const teachersMap: Record<number, any> = {}
+    if (teacherIds.length > 0) {
+      const { data: teachersData } = await supabaseAdmin.from("users").select("id, first_name, last_name").in("id", teacherIds)
+      ;(teachersData || []).forEach((t: any) => (teachersMap[t.id] = t))
+    }
+
+    // fetch assignments for these subjects
+    let assignmentsData: any[] = []
+    if (subjectIds.length > 0) {
+      const { data: aData } = await supabaseAdmin.from("assignments").select("id, subject_id, title, description, due_date").in("subject_id", subjectIds)
+      assignmentsData = aData || []
+    }
+
+    const subjects = (subjectsRaw || []).map((e: any) => {
+      const sid = Number(e.subject_id)
+      const subj = e.subjects || {}
+      const scores = gradesMap[sid] || []
+      const grade = scores.length > 0 ? Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 100) / 100 : null
+      const teacher = subj.teacher_id ? teachersMap[subj.teacher_id] : null
+      const subjectAssignments = (assignmentsData || []).filter((a: any) => Number(a.subject_id) === sid).map((a: any) => ({
+        id: a.id,
+        title: a.title,
+        description: a.description,
+        due_date: a.due_date,
+        studentGrade: assignmentGradeMap[a.id] ?? null,
+      }))
+      return {
+        id: subj.id || sid,
+        name: subj.name || "",
+        subject_id: sid,
+        description: subj.description || "",
+        teacherName: teacher ? `${teacher.first_name || ''} ${teacher.last_name || ''}`.trim() : null,
+        grade,
+        assignments: subjectAssignments,
+      }
+    })
+
+    // Calcular promedio global considerando solo materias con nota
+    const scored = subjects.filter((s: any) => s.grade !== null).map((s: any) => s.grade as number)
+    const average = scored.length > 0 ? Math.round((scored.reduce((a: number, b: number) => a + b, 0) / scored.length) * 100) / 100 : 0
 
     // Enlaces de exportación (pueden ser rutas reales si existen)
     const exportLinks = {
@@ -39,7 +100,6 @@ export default withAuth(async (req: NextApiRequest, res: NextApiResponse) => {
     res.status(200).json({
       message: 'Acceso concedido solo a estudiante',
       subjects,
-      grades,
       average,
       messages,
       exportLinks,

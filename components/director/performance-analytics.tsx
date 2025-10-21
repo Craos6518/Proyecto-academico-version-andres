@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { apiClient } from "@/lib/api-client"
+import { supabaseApiClient } from "@/lib/supabase-api-client"
 import { BarChart3, PieChart, TrendingUp, Users } from "lucide-react"
 
 interface AnalyticsData {
@@ -33,55 +33,61 @@ export function PerformanceAnalytics() {
   })
 
   useEffect(() => {
-    const grades = apiClient.getGrades()
-    const assignments = apiClient.getAssignments()
+    let mounted = true
+    ;(async () => {
+      const grades = await supabaseApiClient.getGrades()
+      const assignments = await supabaseApiClient.getAssignments()
 
-    const excellent = grades.filter((g) => g.score >= 4.5).length
-    const good = grades.filter((g) => g.score >= 4.0 && g.score < 4.5).length
-    const satisfactory = grades.filter((g) => g.score >= 3.0 && g.score < 4.0).length
-    const failing = grades.filter((g) => g.score < 3.0).length
+      const excellent = grades.filter((g: any) => g.score >= 4.5).length
+      const good = grades.filter((g: any) => g.score >= 4.0 && g.score < 4.5).length
+      const satisfactory = grades.filter((g: any) => g.score >= 3.0 && g.score < 4.0).length
+      const failing = grades.filter((g: any) => g.score < 3.0).length
 
-    // Calculate average by assignment type
-    const parcial1Grades = grades.filter((g) => {
-      const assignment = assignments.find((a) => a.id === g.assignmentId)
-      return assignment?.assignmentType === "parcial1"
-    })
-    const parcial2Grades = grades.filter((g) => {
-      const assignment = assignments.find((a) => a.id === g.assignmentId)
-      return assignment?.assignmentType === "parcial2"
-    })
-    const finalGrades = grades.filter((g) => {
-      const assignment = assignments.find((a) => a.id === g.assignmentId)
-      return assignment?.assignmentType === "final"
-    })
+      const parcial1Grades = grades.filter((g: any) => {
+        const assignment = assignments.find((a: any) => a.id === g.assignmentId)
+        return assignment?.assignmentType === "parcial1"
+      })
+      const parcial2Grades = grades.filter((g: any) => {
+        const assignment = assignments.find((a: any) => a.id === g.assignmentId)
+        return assignment?.assignmentType === "parcial2"
+      })
+      const finalGrades = grades.filter((g: any) => {
+        const assignment = assignments.find((a: any) => a.id === g.assignmentId)
+        return assignment?.assignmentType === "final"
+      })
 
-    const avgParcial1 =
-      parcial1Grades.length > 0
-        ? Math.round((parcial1Grades.reduce((sum, g) => sum + g.score, 0) / parcial1Grades.length) * 10) / 10
-        : 0
+      const avgParcial1 =
+        parcial1Grades.length > 0
+          ? Math.round((parcial1Grades.reduce((sum: number, g: any) => sum + g.score, 0) / parcial1Grades.length) * 10) / 10
+          : 0
 
-    const avgParcial2 =
-      parcial2Grades.length > 0
-        ? Math.round((parcial2Grades.reduce((sum, g) => sum + g.score, 0) / parcial2Grades.length) * 10) / 10
-        : 0
+      const avgParcial2 =
+        parcial2Grades.length > 0
+          ? Math.round((parcial2Grades.reduce((sum: number, g: any) => sum + g.score, 0) / parcial2Grades.length) * 10) / 10
+          : 0
 
-    const avgFinal =
-      finalGrades.length > 0
-        ? Math.round((finalGrades.reduce((sum, g) => sum + g.score, 0) / finalGrades.length) * 10) / 10
-        : 0
+      const avgFinal =
+        finalGrades.length > 0
+          ? Math.round((finalGrades.reduce((sum: number, g: any) => sum + g.score, 0) / finalGrades.length) * 10) / 10
+          : 0
 
-    setAnalytics({
-      totalGrades: grades.length,
-      excellentGrades: excellent,
-      goodGrades: good,
-      satisfactoryGrades: satisfactory,
-      failingGrades: failing,
-      averageByType: {
-        parcial1: avgParcial1,
-        parcial2: avgParcial2,
-        final: avgFinal,
-      },
-    })
+      if (mounted)
+        setAnalytics({
+          totalGrades: grades.length,
+          excellentGrades: excellent,
+          goodGrades: good,
+          satisfactoryGrades: satisfactory,
+          failingGrades: failing,
+          averageByType: {
+            parcial1: avgParcial1,
+            parcial2: avgParcial2,
+            final: avgFinal,
+          },
+        })
+    })()
+    return () => {
+      mounted = false
+    }
   }, [])
 
   const getPercentage = (value: number) => {

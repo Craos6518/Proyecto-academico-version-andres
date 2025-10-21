@@ -11,7 +11,6 @@ interface MySubjectsListProps {
 
 export function MySubjectsList({ studentId }: MySubjectsListProps) {
   const [subjects, setSubjects] = useState<any[]>([])
-  const [grades, setGrades] = useState<any[]>([])
   const [expandedSubject, setExpandedSubject] = useState<string | null>(null)
   const [loading, setLoading] = useState<boolean>(true)
   const [error, setError] = useState<string>("")
@@ -27,7 +26,6 @@ export function MySubjectsList({ studentId }: MySubjectsListProps) {
       .then((res) => res.json())
       .then((data) => {
         setSubjects(data.subjects || [])
-        setGrades(data.grades || [])
         setLoading(false)
       })
       .catch((err) => {
@@ -58,13 +56,13 @@ export function MySubjectsList({ studentId }: MySubjectsListProps) {
   return (
     <div className="space-y-4">
       {subjects.map((subject) => {
-        const subjectGrades = grades.filter((g) => g.subject_id === subject.subject_id)
-        const finalGrade = subjectGrades.length > 0 ? subjectGrades.reduce((acc, g) => acc + g.grade, 0) / subjectGrades.length : null
-        const isExpanded = expandedSubject === subject.subject_id
+        const isExpanded = expandedSubject === String(subject.id || subject.subject_id)
+        const finalGrade = subject.grade ?? null
+        const assignments = subject.assignments || []
         return (
-          <div key={subject.subject_id} className="border rounded-lg overflow-hidden">
+          <div key={subject.id || subject.subject_id} className="border rounded-lg overflow-hidden">
             <button
-              onClick={() => toggleSubject(subject.subject_id)}
+              onClick={() => toggleSubject(String(subject.id || subject.subject_id))}
               className="w-full p-4 hover:bg-accent/50 transition-colors text-left"
             >
               <div className="flex items-start justify-between mb-3">
@@ -86,7 +84,7 @@ export function MySubjectsList({ studentId }: MySubjectsListProps) {
                       <span>Promedio</span>
                     </div>
                     <div className={`text-2xl font-bold ${finalGrade >= 3.0 ? "text-green-600" : "text-red-600"}`}>
-                      {finalGrade.toFixed(1)}
+                      {finalGrade !== null ? Number(finalGrade).toFixed(1) : "-"}
                     </div>
                   </div>
                 )}
@@ -95,22 +93,33 @@ export function MySubjectsList({ studentId }: MySubjectsListProps) {
             {isExpanded && (
               <div className="border-t bg-muted/30 p-4 space-y-4">
                 <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <FileText className="w-4 h-4 text-muted-foreground" />
-                    <h4 className="font-semibold text-sm">Calificaciones</h4>
+                  <div className="mb-2">
+                    <h4 className="font-semibold text-sm">Descripción</h4>
+                    <p className="text-sm text-muted-foreground pl-6">{subject.description || "Sin descripción"}</p>
                   </div>
-                  {subjectGrades.length > 0 ? (
-                    <div className="space-y-2 pl-6">
-                      {subjectGrades.map((grade, idx) => (
-                        <div key={idx} className="flex items-center gap-2">
-                          <Badge variant="outline">Nota</Badge>
-                          <span className="text-xs">{grade.grade}</span>
-                        </div>
-                      ))}
+                  <div className="mb-2">
+                    <h4 className="font-semibold text-sm">Profesor</h4>
+                    <p className="text-sm text-muted-foreground pl-6">{subject.teacherName || "Desconocido"}</p>
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <FileText className="w-4 h-4 text-muted-foreground" />
+                      <h4 className="font-semibold text-sm">Evaluaciones</h4>
                     </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground pl-6">No hay calificaciones registradas</p>
-                  )}
+                    {assignments.length > 0 ? (
+                      <div className="space-y-2 pl-6">
+                        {assignments.map((a: any) => (
+                          <div key={a.id} className="flex items-center gap-3">
+                            <Badge variant="outline">{a.title}</Badge>
+                            <div className="text-xs text-muted-foreground">{a.description}</div>
+                            <div className="ml-auto text-sm">{a.studentGrade !== null ? `Tu nota: ${a.studentGrade}` : "Sin nota"}</div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground pl-6">No hay evaluaciones registradas</p>
+                    )}
+                  </div>
                 </div>
               </div>
             )}

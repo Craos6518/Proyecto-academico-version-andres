@@ -26,8 +26,34 @@ export default function LoginPage() {
 
     // Simulate network delay
     await new Promise((resolve) => setTimeout(resolve, 500))
+    // Hacer la autenticación en el servidor para recibir logs y token
+    let user = null
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      })
 
-    const user = authService.login(username, password)
+      if (res.ok) {
+        const body = await res.json()
+        user = body.user
+        // almacenar token y usuario en authService
+        if (body.token) {
+          try {
+            authService.setAuthToken(body.token)
+            authService.setCurrentUser({ ...body.user, token: body.token })
+          } catch (e) {
+            // noop
+          }
+        }
+      } else {
+        user = null
+      }
+    } catch (err) {
+      console.error('fetch /api/auth/login error:', err)
+      user = null
+    }
 
     if (user) {
       // Redirect based on role

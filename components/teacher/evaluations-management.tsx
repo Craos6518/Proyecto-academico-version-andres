@@ -20,8 +20,8 @@ import {
 } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { apiClient } from "@/lib/api-client"
-import type { Assignment, Subject } from "@/lib/mock-data"
+import { supabaseApiClient } from "@/lib/supabase-api-client"
+import type { Assignment, Subject } from "@/lib/types"
 import { Plus, Pencil, Trash2, Calendar, FileText, AlertCircle } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
@@ -101,7 +101,7 @@ export function EvaluationsManagement({ teacherId }: EvaluationsManagementProps)
       setFormData({
         subjectId: assignment.subjectId,
         name: assignment.name,
-        description: assignment.description,
+  description: assignment.description || "",
         assignmentType: assignment.assignmentType,
         maxScore: assignment.maxScore,
         weight: assignment.weight,

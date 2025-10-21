@@ -16,6 +16,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (req.method === "POST") {
       const payload = req.body
       const dbPayload = {
+        ...(payload.id ? { id: payload.id } : {}),
         student_id: payload.studentId,
         assignment_id: payload.assignmentId,
         subject_id: payload.subjectId,
@@ -23,6 +24,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         comments: payload.comments,
         graded_by: payload.gradedBy,
         graded_at: payload.gradedAt,
+      }
+      if (!dbPayload.id) {
+        try {
+          const { data: maxRow, error: maxErr } = await supabaseAdmin.from("grades").select("id").order("id", { ascending: false }).limit(1).maybeSingle()
+          if (!maxErr && maxRow && (maxRow as any).id !== undefined && (maxRow as any).id !== null) {
+            dbPayload.id = Number((maxRow as any).id) + 1
+          } else {
+            dbPayload.id = 1
+          }
+        } catch (e) {
+          dbPayload.id = 1
+        }
       }
       const { data, error } = await supabaseAdmin.from("grades").insert(dbPayload).select().limit(1).single()
       if (error) throw error

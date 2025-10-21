@@ -20,11 +20,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { apiClient } from "@/lib/api-client"
-import { mockRoles, type User } from "@/lib/mock-data"
+import { supabaseApiClient } from "@/lib/supabase-api-client"
+import type { User, Role } from "@/lib/types"
 import { Plus, Pencil, Trash2, Search, KeyRound, AlertCircle } from "lucide-react"
 import { changeUserPassword } from "@/lib/actions/password"
-import { authService } from "@/lib/auth"
+import { authService, normalizeRole } from "@/lib/auth"
 
 export function UsersManagement() {
   const handlePasswordChange = async () => {
@@ -99,7 +99,7 @@ export function UsersManagement() {
   const [passwordSuccess, setPasswordSuccess] = useState(false)
 
   const currentUser = authService.getCurrentUser()
-  const isDirector = currentUser?.roleName === "Director"
+  const isDirector = normalizeRole(currentUser?.role ?? currentUser?.roleName) === "director"
 
   useEffect(() => {
     loadUsers()
@@ -112,24 +112,32 @@ export function UsersManagement() {
       .catch((err) => console.error('Failed to load users', err))
   }
 
-  const availableRoles = isDirector ? mockRoles.filter((role) => role.name !== "Administrador") : mockRoles
+  const [availableRoles, setAvailableRoles] = useState<Role[]>([])
+
+  useEffect(() => {
+    fetch('/api/admin/roles')
+      .then((r) => r.json())
+      .then((data) => setAvailableRoles(data || []))
+      .catch((err) => console.error('Failed to load roles', err))
+  }, [])
 
   const filteredUsers = users
-    .filter((user) => !isDirector || user.roleName !== "Administrador")
+    .filter((user) => !isDirector || normalizeRole(user.role ?? user.roleName) !== "admin")
     .filter((user) => {
       const matchesSearch =
         user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
         user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
         `${user.firstName} ${user.lastName}`.toLowerCase().includes(searchTerm.toLowerCase())
 
-      const matchesRole = roleFilter === "all" || user.roleName === roleFilter
+      const matchesRole =
+        roleFilter === "all" || normalizeRole(user.role ?? user.roleName) === normalizeRole(roleFilter)
 
       return matchesSearch && matchesRole
     })
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const role = mockRoles.find((r) => r.id === formData.roleId);
+  const role = availableRoles.find((r) => r.id === formData.roleId);
     const payload = {
       ...formData,
       roleName: role?.name || "Estudiante",
@@ -166,10 +174,10 @@ export function UsersManagement() {
     setFormData({
       id: user.id,
       username: user.username,
-      email: user.email,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      roleId: user.roleId,
+      email: user.email ?? "",
+      firstName: user.firstName ?? "",
+      lastName: user.lastName ?? "",
+      roleId: user.roleId ?? 4,
     });
     setIsDialogOpen(true);
   }
@@ -402,11 +410,13 @@ export function UsersManagement() {
                 <TableRow key={user.id}>
                   <TableCell className="font-medium">{user.username}</TableCell>
                   <TableCell>
-                    {user.firstName} {user.lastName}
+                    {user.firstName ?? ""} {user.lastName ?? ""}
                   </TableCell>
                   <TableCell>{user.email}</TableCell>
                   <TableCell>
-                    <Badge variant={getRoleBadgeVariant(user.roleName)}>{user.roleName}</Badge>
+                    <Badge variant={getRoleBadgeVariant(user.roleName ?? "")}>
+                      {user.roleName ?? "-"}
+                    </Badge>
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">

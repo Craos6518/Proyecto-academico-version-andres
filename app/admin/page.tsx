@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { authService, type AuthUser } from "@/lib/auth"
+import { authService, type AuthUser, normalizeRole } from "@/lib/auth"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -26,7 +26,7 @@ export default function AdminDashboard() {
   useEffect(() => {
     setIsMounted(true);
     const currentUser = authService.getCurrentUser();
-    if (!currentUser || currentUser.roleName !== "Administrador") {
+      if (!currentUser || normalizeRole(currentUser.role ?? currentUser.roleName) !== "admin") {
       router.push("/");
       return;
     }

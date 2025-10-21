@@ -39,12 +39,32 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (req.method === "POST") {
       const payload = req.body
       const dbPayload = {
+        // For schemas that don't have auto-increment on id, avoid null id by generating one
+        // (best-effort: compute max(id)+1). This keeps compatibility with the simple SQL seeds
+        // that define `id integer primary key` without default.
+        // If you have a service_role key and Postgres sequences, consider altering the table
+        // to use SERIAL/IDENTITY instead.
+        ...(payload.id ? { id: payload.id } : {}),
         name: payload.name,
         code: payload.code,
         description: payload.description,
         credits: payload.credits,
         teacher_id: payload.teacherId,
         teacher_name: payload.teacherName,
+      }
+      // If no id provided, try to allocate one using max(id)+1 to avoid null constraint
+      if (!dbPayload.id) {
+        try {
+          const { data: maxRow, error: maxErr } = await supabaseAdmin.from("subjects").select("id").order("id", { ascending: false }).limit(1).maybeSingle()
+          if (!maxErr && maxRow && (maxRow as any).id !== undefined && (maxRow as any).id !== null) {
+            dbPayload.id = Number((maxRow as any).id) + 1
+          } else {
+            dbPayload.id = 1
+          }
+        } catch (e) {
+          // fallback
+          dbPayload.id = 1
+        }
       }
       const { data, error } = await supabaseAdmin.from("subjects").insert(dbPayload).select().limit(1).single()
       if (error) throw error

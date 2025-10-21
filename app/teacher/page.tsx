@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { authService } from "@/lib/auth"
+import { normalizeRole } from "@/lib/auth"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -44,7 +45,7 @@ export default function TeacherDashboard() {
 
   useEffect(() => {
     const currentUser = authService.getCurrentUser()
-    if (!currentUser || currentUser.roleName !== "Profesor") {
+    if (!currentUser || normalizeRole(currentUser.role ?? currentUser.roleName) !== "teacher") {
       router.push("/")
       return
     }

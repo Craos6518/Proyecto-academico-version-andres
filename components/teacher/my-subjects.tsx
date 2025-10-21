@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Separator } from "@/components/ui/separator"
-import type { Subject, Assignment, User } from "@/lib/mock-data"
+import type { Subject, Assignment, User } from "@/lib/types"
 import { BookOpen, Users, Calendar, ClipboardList, Award } from "lucide-react"
 
 interface MySubjectsProps {
@@ -183,13 +183,13 @@ export function MySubjects({ teacherId }: MySubjectsProps) {
                     <div key={student.id} className="flex items-center gap-2 p-2 rounded-md bg-muted/50">
                       <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
                         <span className="text-xs font-medium">
-                          {student.firstName[0]}
-                          {student.lastName[0]}
+                          {(student.firstName ?? "")[0] ?? ""}
+                          {(student.lastName ?? "")[0] ?? ""}
                         </span>
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate">
-                          {student.firstName} {student.lastName}
+                          {student.firstName ?? ""} {student.lastName ?? ""}
                         </p>
                         <p className="text-xs text-muted-foreground truncate">{student.email}</p>
                       </div>

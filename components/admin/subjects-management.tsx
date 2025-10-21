@@ -18,8 +18,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { apiClient } from "@/lib/api-client"
-import type { Subject } from "@/lib/mock-data"
+import { supabaseApiClient } from "@/lib/supabase-api-client"
+import type { Subject } from "@/lib/types"
 import { Plus, Pencil, Trash2, Search } from "lucide-react"
 
 export function SubjectsManagement() {
@@ -56,7 +56,7 @@ export function SubjectsManagement() {
     (subject) =>
       subject.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       subject.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      subject.teacherName.toLowerCase().includes(searchTerm.toLowerCase()),
+  (subject.teacherName || "").toLowerCase().includes(searchTerm.toLowerCase()),
   )
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -81,9 +81,9 @@ export function SubjectsManagement() {
     setFormData({
       name: subject.name,
       code: subject.code,
-      description: subject.description,
-      credits: subject.credits,
-      teacherId: subject.teacherId,
+  description: subject.description || "",
+  credits: subject.credits ?? 0,
+  teacherId: subject.teacherId ?? 0,
     })
     setIsDialogOpen(true)
   }
