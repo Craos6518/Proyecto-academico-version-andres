@@ -1,6 +1,3 @@
-
-"use server"
-
 import { createClient } from "@supabase/supabase-js"
 
 // Se esperan estas variables de entorno en Vercel/Next

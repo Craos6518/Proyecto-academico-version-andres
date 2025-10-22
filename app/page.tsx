@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { authService } from "@/lib/auth"
+import { authService, normalizeRole } from "@/lib/auth"
 import { GraduationCap, AlertCircle } from "lucide-react"
 
 export default function LoginPage() {
@@ -55,29 +55,23 @@ export default function LoginPage() {
       user = null
     }
 
-    if (user) {
-      // Redirect based on role
-      switch (user.roleName) {
-        case "Administrador":
-          router.push("/admin")
-          break
-        case "Director":
-          router.push("/director")
-          break
-        case "Profesor":
-          router.push("/teacher")
-          break
-        case "Estudiante":
-          router.push("/student")
-          break
-        default:
-          router.push("/")
+      if (user) {
+        // Redirect using normalized role
+        const roleKey = normalizeRole(user.role ?? user.roleName)
+        const routeByRole: Record<string, string> = {
+          admin: "/admin",
+          director: "/director",
+          teacher: "/teacher",
+          student: "/student",
+        }
+        const target = routeByRole[roleKey] ?? "/"
+        router.push(target)
+        return
       }
-    } else {
+
       setError("Usuario o contraseña incorrectos")
       setIsLoading(false)
     }
-  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-indigo-50 p-4">

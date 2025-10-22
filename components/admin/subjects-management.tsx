@@ -18,7 +18,6 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { supabaseApiClient } from "@/lib/supabase-api-client"
 import type { Subject } from "@/lib/types"
 import { Plus, Pencil, Trash2, Search } from "lucide-react"
 
