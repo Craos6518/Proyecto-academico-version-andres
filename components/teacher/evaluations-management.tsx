@@ -20,7 +20,6 @@ import {
 } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { supabaseApiClient } from "@/lib/supabase-api-client"
 import type { Assignment, Subject } from "@/lib/types"
 import { Plus, Pencil, Trash2, Calendar, FileText, AlertCircle } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"

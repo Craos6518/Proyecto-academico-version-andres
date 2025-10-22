@@ -17,7 +17,8 @@ export default withAuth(async (req: NextApiRequest, res: NextApiResponse) => {
     const [enrollRes, gradesRes] = await Promise.all([
       // include subject description and teacher_id via related select
       supabaseAdmin.from("enrollments").select("subject_id, subjects(id, name, description, teacher_id)").eq("student_id", studentId),
-      supabaseAdmin.from("grades").select("id, assignment_id, subject_id, score").eq("student_id", studentId),
+  // grades query (usar '*' para evitar fallas por columnas faltantes)
+  supabaseAdmin.from("grades").select("*").eq("student_id", studentId),
     ])
 
     // Intentar obtener mensajes, pero manejar si la tabla no existe
@@ -31,8 +32,16 @@ export default withAuth(async (req: NextApiRequest, res: NextApiResponse) => {
       messages = []
     }
 
-    const subjectsRaw = (enrollRes.data ?? [])
-    const gradesRaw = (gradesRes.data ?? [])
+  const subjectsRaw = (enrollRes.data ?? [])
+  const gradesRaw = (gradesRes.data ?? [])
+    // DEBUG: log info útil para depuración
+    console.debug('[secure-data] studentId=', studentId, 'enrollCount=', (subjectsRaw || []).length, 'gradesResError=', gradesRes.error, 'gradesCount=', (gradesRaw || []).length)
+    try {
+      console.debug('[secure-data] enrollRes.data sample=', JSON.stringify((enrollRes.data || []).slice(0,3)))
+      console.debug('[secure-data] gradesRes.data sample=', JSON.stringify((gradesRes.data || []).slice(0,10)))
+    } catch (e) {
+      console.debug('[secure-data] debug stringify error', e)
+    }
 
     // Mapear calificaciones por subject_id para acceso rápido
     const gradesMap: Record<number, number[]> = {}
@@ -56,14 +65,14 @@ export default withAuth(async (req: NextApiRequest, res: NextApiResponse) => {
       ;(teachersData || []).forEach((t: any) => (teachersMap[t.id] = t))
     }
 
-    // fetch assignments for these subjects
+    // fetch assignments for these subjects — usar select('*') para evitar errores por columnas faltantes
     let assignmentsData: any[] = []
     if (subjectIds.length > 0) {
-      const { data: aData } = await supabaseAdmin.from("assignments").select("id, subject_id, title, description, due_date").in("subject_id", subjectIds)
+      const { data: aData } = await supabaseAdmin.from("assignments").select("*").in("subject_id", subjectIds)
       assignmentsData = aData || []
     }
 
-    const subjects = (subjectsRaw || []).map((e: any) => {
+  const subjects = (subjectsRaw || []).map((e: any) => {
       const sid = Number(e.subject_id)
       const subj = e.subjects || {}
       const scores = gradesMap[sid] || []
@@ -71,9 +80,12 @@ export default withAuth(async (req: NextApiRequest, res: NextApiResponse) => {
       const teacher = subj.teacher_id ? teachersMap[subj.teacher_id] : null
       const subjectAssignments = (assignmentsData || []).filter((a: any) => Number(a.subject_id) === sid).map((a: any) => ({
         id: a.id,
-        title: a.title,
-        description: a.description,
-        due_date: a.due_date,
+        title: a.title ?? a.name ?? null,
+        description: a.description ?? null,
+        due_date: a.due_date ?? null,
+        type: a.assignment_type ?? null,
+        max_score: a.max_score ?? null,
+        weight: a.weight ?? null,
         studentGrade: assignmentGradeMap[a.id] ?? null,
       }))
       return {
@@ -97,10 +109,44 @@ export default withAuth(async (req: NextApiRequest, res: NextApiResponse) => {
       pdf: `/api/student/grades.pdf?studentId=${studentId}`,
     }
 
-    res.status(200).json({
+  // Normalizar gradesRaw para exponer un array top-level que los componentes cliente esperan
+    // build an assignment lookup to attach names/descriptions to grades
+    const assignmentById: Record<string|number, any> = {}
+    ;(assignmentsData || []).forEach((a: any) => { assignmentById[a.id] = a })
+
+  const grades = (gradesRaw || []).map((g: any) => {
+      const aid = g.assignment_id ?? g.assignmentId ?? null
+      const assignmentRel = g.assignments ?? (aid ? assignmentById[aid] : null)
+      const assignment = assignmentRel || (aid ? assignmentById[aid] : null)
+      return {
+        id: g.id,
+        assignment_id: aid,
+        subject_id: Number(g.subject_id ?? g.subjectId ?? 0),
+        score: Number(g.score ?? g.grade ?? 0),
+        graded_at: g.graded_at ?? g.gradedAt ?? null,
+        graded_by: g.graded_by ?? g.gradedBy ?? null,
+        comment: g.comment ?? g.notes ?? g.note ?? null,
+        name: assignment ? (assignment.title ?? assignment.name ?? `Evaluación ${aid}`) : (g.name ?? null),
+        assignment_description: assignment ? (assignment.description ?? null) : null,
+      }
+    })
+
+    // Si se pide debug, devolver los datos crudos para inspección
+    if (String(req.query.debug) === '1' || String(req.query.debug) === 'true') {
+      return res.status(200).json({
+        message: 'DEBUG - raw data',
+        enrollRaw: enrollRes.data ?? null,
+        gradesRaw: gradesRes.data ?? null,
+        assignmentsData: assignmentsData ?? null,
+      })
+    }
+
+    // Respuesta normal para el cliente
+    return res.status(200).json({
       message: 'Acceso concedido solo a estudiante',
       subjects,
       average,
+      grades,
       messages,
       exportLinks,
     })

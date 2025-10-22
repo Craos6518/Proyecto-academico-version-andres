@@ -1,7 +1,7 @@
 import type { User } from "./types"
 import bcrypt from "bcryptjs"
 import jwt from "jsonwebtoken"
-import { supabaseApiClient } from "./supabase-api-client"
+// Import dinámico de `supabase-api-client` cuando sea necesario en runtime (server-only)
 
 const AUTH_STORAGE_KEY = "academic_auth_user"
 const AUTH_TOKEN_KEY = "academic_auth_token"
@@ -148,6 +148,8 @@ export const authService = {
     // Busca por id o por email según tipo
     if (!idOrEmail) return null
     try {
+      // Import dinámico para evitar bundling en cliente
+      const { supabaseApiClient } = await import("./supabase-api-client")
       if (typeof idOrEmail === "number") {
         return await supabaseApiClient.getUserById(idOrEmail as number)
       }
@@ -164,6 +166,7 @@ export const authService = {
 // Nueva función async para login usando Supabase como fuente de usuarios.
 // No reemplaza automáticamente el `authService.login` para evitar romper consumidores.
 export async function loginWithSupabase(username: string, password: string) {
+  const { supabaseApiClient } = await import("./supabase-api-client")
   const user = await supabaseApiClient.getUserByUsername(username)
   if (!user) return null
 

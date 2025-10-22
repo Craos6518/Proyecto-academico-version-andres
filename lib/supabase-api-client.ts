@@ -23,7 +23,19 @@ export class SupabaseApiClient {
       console.error("getUsers error:", error)
       return []
     }
-    return (data ?? []) as User[]
+    // Map snake_case DB fields to camelCase User type
+    return (data ?? []).map((row: any) => ({
+      id: row.id,
+      username: row.username,
+      email: row.email,
+      firstName: row.first_name ?? row.firstName,
+      lastName: row.last_name ?? row.lastName,
+      roleId: row.role_id ?? row.roleId,
+      roleName: row.role_name ?? row.roleName,
+      role: row.role ?? row.role,
+      isActive: row.is_active ?? row.isActive,
+      password_hash: row.password_hash ?? row.passwordHash,
+    })) as User[]
   }
 
   async getUserById(id: number): Promise<User | undefined> {
@@ -138,21 +150,40 @@ export class SupabaseApiClient {
   const supabaseAdmin = await getAdminClient()
   const { data, error } = await supabaseAdmin.from("enrollments").select("*")
     if (error) return []
-    return (data ?? []) as Enrollment[]
+    return (data ?? []).map((row: any) => ({
+      id: row.id,
+      studentId: row.student_id ?? row.studentId,
+      subjectId: row.subject_id ?? row.subjectId,
+      enrollmentDate: row.enrollment_date ?? row.enrollmentDate,
+      status: row.status,
+    })) as Enrollment[]
   }
 
   async getEnrollmentsByStudent(studentId: number): Promise<Enrollment[]> {
   const supabaseAdmin = await getAdminClient()
-  const { data, error } = await supabaseAdmin.from("enrollments").select("*").eq("studentId", studentId)
+  // Query using snake_case column name
+  const { data, error } = await supabaseAdmin.from("enrollments").select("*").eq("student_id", studentId)
     if (error) return []
-    return (data ?? []) as Enrollment[]
+    return (data ?? []).map((row: any) => ({
+      id: row.id,
+      studentId: row.student_id ?? row.studentId,
+      subjectId: row.subject_id ?? row.subjectId,
+      enrollmentDate: row.enrollment_date ?? row.enrollmentDate,
+      status: row.status,
+    })) as Enrollment[]
   }
 
   async getEnrollmentsBySubject(subjectId: number): Promise<Enrollment[]> {
   const supabaseAdmin = await getAdminClient()
-  const { data, error } = await supabaseAdmin.from("enrollments").select("*").eq("subjectId", subjectId)
+  const { data, error } = await supabaseAdmin.from("enrollments").select("*").eq("subject_id", subjectId)
     if (error) return []
-    return (data ?? []) as Enrollment[]
+    return (data ?? []).map((row: any) => ({
+      id: row.id,
+      studentId: row.student_id ?? row.studentId,
+      subjectId: row.subject_id ?? row.subjectId,
+      enrollmentDate: row.enrollment_date ?? row.enrollmentDate,
+      status: row.status,
+    })) as Enrollment[]
   }
 
   async createEnrollment(enrollment: Omit<Enrollment, "id">): Promise<Enrollment | null> {
@@ -220,21 +251,48 @@ export class SupabaseApiClient {
   const supabaseAdmin = await getAdminClient()
   const { data, error } = await supabaseAdmin.from("grades").select("*")
     if (error) return []
-    return (data ?? []) as Grade[]
+    return (data ?? []).map((row: any) => ({
+      id: row.id,
+      studentId: row.student_id ?? row.studentId,
+      assignmentId: row.assignment_id ?? row.assignmentId,
+      subjectId: row.subject_id ?? row.subjectId,
+      score: typeof row.score === 'string' ? parseFloat(row.score) : row.score,
+      gradedBy: row.graded_by ?? row.gradedBy,
+      gradedAt: row.graded_at ?? row.gradedAt,
+      comments: row.comments,
+    })) as Grade[]
   }
 
   async getGradesByStudent(studentId: number): Promise<Grade[]> {
   const supabaseAdmin = await getAdminClient()
-  const { data, error } = await supabaseAdmin.from("grades").select("*").eq("studentId", studentId)
+  const { data, error } = await supabaseAdmin.from("grades").select("*").eq("student_id", studentId)
     if (error) return []
-    return (data ?? []) as Grade[]
+    return (data ?? []).map((row: any) => ({
+      id: row.id,
+      studentId: row.student_id ?? row.studentId,
+      assignmentId: row.assignment_id ?? row.assignmentId,
+      subjectId: row.subject_id ?? row.subjectId,
+      score: typeof row.score === 'string' ? parseFloat(row.score) : row.score,
+      gradedBy: row.graded_by ?? row.gradedBy,
+      gradedAt: row.graded_at ?? row.gradedAt,
+      comments: row.comments,
+    })) as Grade[]
   }
 
   async getGradesBySubject(subjectId: number): Promise<Grade[]> {
   const supabaseAdmin = await getAdminClient()
-  const { data, error } = await supabaseAdmin.from("grades").select("*").eq("subjectId", subjectId)
+  const { data, error } = await supabaseAdmin.from("grades").select("*").eq("subject_id", subjectId)
     if (error) return []
-    return (data ?? []) as Grade[]
+    return (data ?? []).map((row: any) => ({
+      id: row.id,
+      studentId: row.student_id ?? row.studentId,
+      assignmentId: row.assignment_id ?? row.assignmentId,
+      subjectId: row.subject_id ?? row.subjectId,
+      score: typeof row.score === 'string' ? parseFloat(row.score) : row.score,
+      gradedBy: row.graded_by ?? row.gradedBy,
+      gradedAt: row.graded_at ?? row.gradedAt,
+      comments: row.comments,
+    })) as Grade[]
   }
 
   async getGradesByStudentAndSubject(studentId: number, subjectId: number): Promise<Grade[]> {
@@ -242,11 +300,20 @@ export class SupabaseApiClient {
     const { data, error } = await supabaseAdmin
       .from("grades")
       .select("*")
-      .eq("studentId", studentId)
-      .eq("subjectId", subjectId)
+      .eq("student_id", studentId)
+      .eq("subject_id", subjectId)
 
     if (error) return []
-    return (data ?? []) as Grade[]
+    return (data ?? []).map((row: any) => ({
+      id: row.id,
+      studentId: row.student_id ?? row.studentId,
+      assignmentId: row.assignment_id ?? row.assignmentId,
+      subjectId: row.subject_id ?? row.subjectId,
+      score: typeof row.score === 'string' ? parseFloat(row.score) : row.score,
+      gradedBy: row.graded_by ?? row.gradedBy,
+      gradedAt: row.graded_at ?? row.gradedAt,
+      comments: row.comments,
+    })) as Grade[]
   }
 
   async createGrade(grade: Omit<Grade, "id">): Promise<Grade | null> {
@@ -282,7 +349,9 @@ export class SupabaseApiClient {
     let totalWeight = 0
 
     for (const grade of grades) {
-      const assignment = assignments.find((a) => a.id === grade.assignmentId)
+      // assignments may have id as number or string, ensure comparable
+      const gradeAssignmentId = typeof grade.assignmentId === 'string' ? Number(grade.assignmentId) : grade.assignmentId
+      const assignment = assignments.find((a) => (typeof a.id === 'string' ? Number(a.id) : a.id) === gradeAssignmentId)
       if (assignment) {
         totalWeightedScore += (grade.score * assignment.weight) / 100
         totalWeight += assignment.weight

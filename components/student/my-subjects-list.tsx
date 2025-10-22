@@ -17,10 +17,12 @@ export function MySubjectsList({ studentId }: MySubjectsListProps) {
 
   useEffect(() => {
     setLoading(true)
+    // Adjuntar token si existe en authService (localStorage)
+    const token = typeof window !== "undefined" ? (require("@/lib/auth").authService.getAuthToken?.() ?? null) : null
     fetch(`/api/student/secure-data`, {
+      credentials: 'same-origin',
       headers: {
-        // Si usas JWT, agrega aquí el token
-        // Authorization: `Bearer ${token}`
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
     })
       .then((res) => res.json())
@@ -110,8 +112,8 @@ export function MySubjectsList({ studentId }: MySubjectsListProps) {
                       <div className="space-y-2 pl-6">
                         {assignments.map((a: any) => (
                           <div key={a.id} className="flex items-center gap-3">
-                            <Badge variant="outline">{a.title}</Badge>
-                            <div className="text-xs text-muted-foreground">{a.description}</div>
+                            <Badge variant="outline">{a.title || a.name || a.assignmentName || "Evaluación"}</Badge>
+                            <div className="text-xs text-muted-foreground">{a.description || a.comment || ""}</div>
                             <div className="ml-auto text-sm">{a.studentGrade !== null ? `Tu nota: ${a.studentGrade}` : "Sin nota"}</div>
                           </div>
                         ))}

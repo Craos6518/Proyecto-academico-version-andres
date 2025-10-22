@@ -2,47 +2,128 @@
 
 import { supabaseApiClient } from "./supabase-api-client"
 
-export const apiClientAsync = {
-  // Users
-  getUsers: async () => await supabaseApiClient.getUsers(),
-  getUserById: async (id: number) => await supabaseApiClient.getUserById(id),
-  createUser: async (u: any) => await supabaseApiClient.createUser(u),
-  updateUser: async (id: number, updates: any) => await supabaseApiClient.updateUser(id, updates),
-  deleteUser: async (id: number) => await supabaseApiClient.deleteUser(id),
-
-  // Subjects
-  getSubjects: async () => await supabaseApiClient.getSubjects(),
-  getSubjectById: async (id: number) => await supabaseApiClient.getSubjectById(id),
-  getSubjectsByTeacher: async (teacherId: number) => await supabaseApiClient.getSubjectsByTeacher(teacherId),
-  createSubject: async (s: any) => await supabaseApiClient.createSubject(s),
-  updateSubject: async (id: number, updates: any) => await supabaseApiClient.updateSubject(id, updates),
-  deleteSubject: async (id: number) => await supabaseApiClient.deleteSubject(id),
-
-  // Enrollments
-  getEnrollments: async () => await supabaseApiClient.getEnrollments(),
-  getEnrollmentsByStudent: async (studentId: number) => await supabaseApiClient.getEnrollmentsByStudent(studentId),
-  getEnrollmentsBySubject: async (subjectId: number) => await supabaseApiClient.getEnrollmentsBySubject(subjectId),
-  createEnrollment: async (e: any) => await supabaseApiClient.createEnrollment(e),
-  updateEnrollment: async (id: number, updates: any) => await supabaseApiClient.updateEnrollment(id, updates),
-  deleteEnrollment: async (id: number) => await supabaseApiClient.deleteEnrollment(id),
-
-  // Assignments
-  getAssignments: async () => await supabaseApiClient.getAssignments(),
-  getAssignmentsBySubject: async (subjectId: number) => await supabaseApiClient.getAssignmentsBySubject(subjectId),
-  createAssignment: async (a: any) => await supabaseApiClient.createAssignment(a),
-  updateAssignment: async (id: number, updates: any) => await supabaseApiClient.updateAssignment(id, updates),
-  deleteAssignment: async (id: number) => await supabaseApiClient.deleteAssignment(id),
-
-  // Grades
-  getGrades: async () => await supabaseApiClient.getGrades(),
-  getGradesByStudent: async (studentId: number) => await supabaseApiClient.getGradesByStudent(studentId),
-  getGradesBySubject: async (subjectId: number) => await supabaseApiClient.getGradesBySubject(subjectId),
-  getGradesByStudentAndSubject: async (studentId: number, subjectId: number) => await supabaseApiClient.getGradesByStudentAndSubject(studentId, subjectId),
-  createGrade: async (g: any) => await supabaseApiClient.createGrade(g),
-  updateGrade: async (id: number, updates: any) => await supabaseApiClient.updateGrade(id, updates),
-  deleteGrade: async (id: number) => await supabaseApiClient.deleteGrade(id),
-
-  calculateFinalGrade: async (studentId: number, subjectId: number) => await supabaseApiClient.calculateFinalGrade(studentId, subjectId),
+// Users
+export async function getUsers() {
+  return await supabaseApiClient.getUsers()
 }
 
-export default apiClientAsync
+export async function getUserById(id: number) {
+  return await supabaseApiClient.getUserById(id)
+}
+
+export async function createUser(u: any) {
+  return await supabaseApiClient.createUser(u)
+}
+
+export async function updateUser(id: number, updates: any) {
+  return await supabaseApiClient.updateUser(id, updates)
+}
+
+export async function deleteUser(id: number) {
+  return await supabaseApiClient.deleteUser(id)
+}
+
+// Subjects
+export async function getSubjects() {
+  return await supabaseApiClient.getSubjects()
+}
+
+export async function getSubjectById(id: number) {
+  return await supabaseApiClient.getSubjectById(id)
+}
+
+export async function getSubjectsByTeacher(teacherId: number) {
+  return await supabaseApiClient.getSubjectsByTeacher(teacherId)
+}
+
+export async function createSubject(s: any) {
+  return await supabaseApiClient.createSubject(s)
+}
+
+export async function updateSubject(id: number, updates: any) {
+  return await supabaseApiClient.updateSubject(id, updates)
+}
+
+export async function deleteSubject(id: number) {
+  return await supabaseApiClient.deleteSubject(id)
+}
+
+// Enrollments
+export async function getEnrollments() {
+  return await supabaseApiClient.getEnrollments()
+}
+
+export async function getEnrollmentsByStudent(studentId: number) {
+  return await supabaseApiClient.getEnrollmentsByStudent(studentId)
+}
+
+export async function getEnrollmentsBySubject(subjectId: number) {
+  return await supabaseApiClient.getEnrollmentsBySubject(subjectId)
+}
+
+export async function createEnrollment(e: any) {
+  return await supabaseApiClient.createEnrollment(e)
+}
+
+export async function updateEnrollment(id: number, updates: any) {
+  return await supabaseApiClient.updateEnrollment(id, updates)
+}
+
+export async function deleteEnrollment(id: number) {
+  return await supabaseApiClient.deleteEnrollment(id)
+}
+
+// Assignments
+export async function getAssignments() {
+  return await supabaseApiClient.getAssignments()
+}
+
+export async function getAssignmentsBySubject(subjectId: number) {
+  return await supabaseApiClient.getAssignmentsBySubject(subjectId)
+}
+
+export async function createAssignment(a: any) {
+  return await supabaseApiClient.createAssignment(a)
+}
+
+export async function updateAssignment(id: number, updates: any) {
+  return await supabaseApiClient.updateAssignment(id, updates)
+}
+
+export async function deleteAssignment(id: number) {
+  return await supabaseApiClient.deleteAssignment(id)
+}
+
+// Grades
+export async function getGrades() {
+  return await supabaseApiClient.getGrades()
+}
+
+export async function getGradesByStudent(studentId: number) {
+  return await supabaseApiClient.getGradesByStudent(studentId)
+}
+
+export async function getGradesBySubject(subjectId: number) {
+  return await supabaseApiClient.getGradesBySubject(subjectId)
+}
+
+export async function getGradesByStudentAndSubject(studentId: number, subjectId: number) {
+  return await supabaseApiClient.getGradesByStudentAndSubject(studentId, subjectId)
+}
+
+export async function createGrade(g: any) {
+  return await supabaseApiClient.createGrade(g)
+}
+
+export async function updateGrade(id: number, updates: any) {
+  return await supabaseApiClient.updateGrade(id, updates)
+}
+
+export async function deleteGrade(id: number) {
+  return await supabaseApiClient.deleteGrade(id)
+}
+
+export async function calculateFinalGrade(studentId: number, subjectId: number) {
+  return await supabaseApiClient.calculateFinalGrade(studentId, subjectId)
+}
+

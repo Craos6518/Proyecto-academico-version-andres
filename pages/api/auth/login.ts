@@ -7,7 +7,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method !== 'POST') return res.status(405).json({ message: 'Method not allowed' })
 
   const { username, password } = req.body || {}
-
   console.log(`[auth/login] intento de login: user=${username} time=${new Date().toISOString()}`)
 
   if (!username || !password) return res.status(400).json({ message: 'username and password required' })
@@ -52,19 +51,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     console.log(`[auth/login] login exitoso: ${username}`)
-    const token = generateJWT({ ...(user as any) } as any)
-    const rawRole = user.roleName ?? user.role ?? user.role_name ?? ""
+  const token = generateJWT({ ...(user as any) } as any)
+    const rawRole = user.roleName ?? user.role ?? user.role_name ?? ''
     const roleKey = normalizeRole(rawRole)
 
+    // Set HttpOnly cookie with token
+    const maxAge = 60 * 60 * 8 // 8h
+    const secureFlag = process.env.NODE_ENV === 'production' ? '; Secure' : ''
+    res.setHeader('Set-Cookie', `academic_auth_token=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secureFlag}`)
+
+    // Also return token in body to allow client-side pages to persist session in localStorage
+    // (Note: cookie is HttpOnly and will be used by server-side routes; token in body is for client-side persistence)
     return res.status(200).json({
-      message: 'ok',
+      ok: true,
+      token,
       user: {
         id: user.id,
         username: user.username,
         roleName: rawRole,
         role: roleKey,
       },
-      token,
     })
   } catch (err) {
     console.error('[auth/login] error:', err)

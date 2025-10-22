@@ -23,14 +23,20 @@ export function MyGrades({ studentId }: MyGradesProps) {
 
   useEffect(() => {
     setLoading(true)
+    const token = typeof window !== "undefined" ? (require("@/lib/auth").authService.getAuthToken?.() ?? null) : null
     fetch(`/api/student/secure-data`, {
+      credentials: 'same-origin',
       headers: {
-        // Si usas JWT, agrega aquí el token
-        // Authorization: `Bearer ${token}`
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
     })
       .then((res) => res.json())
       .then((data) => {
+        try {
+          console.debug('[MyGrades] fetched data:', data)
+        } catch (e) {
+          // noop
+        }
         setSubjects(data.subjects || [])
         setGrades(data.grades || [])
         setAverage(data.average || null)
@@ -98,16 +104,29 @@ export function MyGrades({ studentId }: MyGradesProps) {
           </Select>
         </div>
 
-        {average !== null && (
+        {/* Mostrar promedio de la materia seleccionada (calculated) */}
+        {selectedSubjectId && (
           <div className="text-right">
             <div className="flex items-center justify-end gap-1 text-sm text-muted-foreground mb-1">
               <Calculator className="w-4 h-4" />
-              <span>Promedio Final</span>
+              <span>Promedio Materia</span>
             </div>
-            <div className={`text-3xl font-bold ${average >= 3.0 ? "text-green-600" : "text-red-600"}`}>
-              {average.toFixed(1)}
+            <div className={`text-3xl font-bold ${(() => {
+              const subj = (subjects || []).find((s) => String(s.subject_id) === String(selectedSubjectId))
+              const subjAvg = subj?.grade ?? null
+              return subjAvg !== null && subjAvg >= 3.0 ? "text-green-600" : "text-red-600"
+            })()}`}>
+              {(() => {
+                const subj = (subjects || []).find((s) => String(s.subject_id) === String(selectedSubjectId))
+                const subjAvg = subj?.grade ?? null
+                return subjAvg !== null ? (Number(subjAvg).toFixed(2)) : "-"
+              })()}
             </div>
-            <div className="text-xs text-muted-foreground mt-1">{average >= 3.0 ? "Aprobado" : "Reprobado"}</div>
+            <div className="text-xs text-muted-foreground mt-1">{(() => {
+              const subj = (subjects || []).find((s) => String(s.subject_id) === String(selectedSubjectId))
+              const subjAvg = subj?.grade ?? null
+              return subjAvg !== null ? (subjAvg >= 3.0 ? "Aprobado" : "Reprobado") : "-"
+            })()}</div>
           </div>
         )}
       </div>
@@ -118,35 +137,80 @@ export function MyGrades({ studentId }: MyGradesProps) {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Materia</TableHead>
+                <TableHead>Evaluación</TableHead>
                 <TableHead>Calificación</TableHead>
                 <TableHead>Fecha</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {grades.filter((g) => g.subject_id === selectedSubjectId).length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={3} className="text-center text-muted-foreground">
-                    No hay calificaciones registradas para esta materia
-                  </TableCell>
-                </TableRow>
-              ) : (
-                grades.filter((g) => g.subject_id === selectedSubjectId).map((grade, idx) => (
-                  <TableRow key={idx}>
-                    <TableCell className="font-medium">{grade.name}</TableCell>
+              {(() => {
+                // construir lookup de assignments desde subjects
+                const assignmentLookup: Record<string|number, any> = {}
+                ;(subjects || []).forEach((s: any) => {
+                  ;(s.assignments || []).forEach((a: any) => { if (a?.id) assignmentLookup[String(a.id)] = a })
+                })
+
+                const rawSelected = (grades || []).filter((g) => String(g.subject_id) === String(selectedSubjectId))
+                if (rawSelected.length === 0) {
+                  const subj = (subjects || []).find((s) => String(s.subject_id) === String(selectedSubjectId))
+                  const derived = (subj?.assignments || []).map((a: any) => ({
+                    id: a.id,
+                    name: a.title || a.name || `Evaluación ${a.id}`,
+                    score: a.studentGrade ?? null,
+                    graded_at: a.graded_at ?? a.gradedAt ?? null,
+                    comment: a.comment ?? a.description ?? null,
+                  }))
+                  if (derived.length === 0) {
+                    return (
+                      <TableRow>
+                        <TableCell colSpan={3} className="text-center text-muted-foreground">
+                          No hay calificaciones registradas para esta materia
+                        </TableCell>
+                      </TableRow>
+                    )
+                  }
+                  return derived.map((grade: any, idx: number) => (
+                    <TableRow key={`d-${idx}`}>
+                      <TableCell className="font-medium">
+                        <div>{grade.name}</div>
+                        {grade.comment && <div className="text-xs text-muted-foreground">{grade.comment}</div>}
+                      </TableCell>
+                      <TableCell>
+                        <span className={`text-lg font-semibold ${(grade.score ?? 0) >= 3.0 ? "text-green-600" : "text-red-600"}`}>
+                          {grade.score ?? "-"}
+                        </span>
+                      </TableCell>
+                      <TableCell>{grade.graded_at ? new Date(grade.graded_at).toLocaleDateString("es-ES") : "-"}</TableCell>
+                    </TableRow>
+                  ))
+                }
+
+                // enriquecer los grades con metadata de assignmentLookup cuando falte
+                const enriched = rawSelected.map((g: any) => {
+                  const a = assignmentLookup[String(g.assignment_id)]
+                  return {
+                    ...g,
+                    name: g.name ?? (a ? (a.title ?? a.name ?? `Evaluación ${g.assignment_id}`) : `Evaluación ${g.assignment_id}`),
+                    comment: g.comment ?? (a ? (a.description ?? null) : null),
+                    score: Number(g.score ?? g.grade ?? 0),
+                  }
+                })
+
+                return enriched.map((g: any, idx: number) => (
+                  <TableRow key={`g-${idx}`}>
+                    <TableCell className="font-medium">
+                      <div>{g.name}</div>
+                      {g.comment && <div className="text-xs text-muted-foreground">{g.comment}</div>}
+                    </TableCell>
                     <TableCell>
-                      <span className={`text-lg font-semibold ${grade.grade >= 3.0 ? "text-green-600" : "text-red-600"}`}>
-                        {grade.grade}
+                      <span className={`text-lg font-semibold ${(g.score ?? 0) >= 3.0 ? "text-green-600" : "text-red-600"}`}>
+                        {typeof g.score === 'number' ? g.score.toFixed(1) : (g.score ?? "-")}
                       </span>
                     </TableCell>
-                    <TableCell>
-                      {/* Si tienes fecha en la base, muéstrala aquí */}
-                      {/* {grade.gradedAt ? new Date(grade.gradedAt).toLocaleDateString("es-ES") : "-"} */}
-                      -
-                    </TableCell>
+                    <TableCell>{g.graded_at ? new Date(g.graded_at).toLocaleDateString("es-ES") : "-"}</TableCell>
                   </TableRow>
                 ))
-              )}
+              })()}
             </TableBody>
           </Table>
         </div>

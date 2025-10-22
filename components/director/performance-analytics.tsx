@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { supabaseApiClient } from "@/lib/supabase-api-client"
+// Usar fetch a rutas API (no usar supabaseApiClient en componentes cliente)
 import { BarChart3, PieChart, TrendingUp, Users } from "lucide-react"
 
 interface AnalyticsData {
@@ -35,24 +35,56 @@ export function PerformanceAnalytics() {
   useEffect(() => {
     let mounted = true
     ;(async () => {
-      const grades = await supabaseApiClient.getGrades()
-      const assignments = await supabaseApiClient.getAssignments()
+      try {
+        // Obtener datos desde las rutas API públicas en el servidor
+        const gradesRes = await fetch('/api/teacher/grades')
+        const assignmentsRes = await fetch('/api/teacher/assignments')
+
+        if (!gradesRes.ok || !assignmentsRes.ok) {
+          throw new Error('Error fetching grades or assignments')
+        }
+
+        const rawGrades = await gradesRes.json()
+        const assignments = await assignmentsRes.json()
+
+        // Normalizar campos de grades: asegurar IDs numéricos y score numérico
+        const grades = (rawGrades || [])
+          .map((g: any) => ({
+            ...g,
+            assignmentId: g.assignmentId ?? g.assignment_id ?? null,
+            studentId: g.studentId ?? g.student_id ?? null,
+            score: g.score ?? 0,
+          }))
+          .map((g: any) => ({
+            ...g,
+            // Convertir posibles strings a numbers (defensivo)
+            assignmentId: g.assignmentId != null ? (typeof g.assignmentId === 'string' ? Number(g.assignmentId) : g.assignmentId) : null,
+            studentId: g.studentId != null ? (typeof g.studentId === 'string' ? Number(g.studentId) : g.studentId) : null,
+            score: typeof g.score === 'string' ? parseFloat(g.score) : Number(g.score),
+          }))
+
 
       const excellent = grades.filter((g: any) => g.score >= 4.5).length
       const good = grades.filter((g: any) => g.score >= 4.0 && g.score < 4.5).length
       const satisfactory = grades.filter((g: any) => g.score >= 3.0 && g.score < 4.0).length
       const failing = grades.filter((g: any) => g.score < 3.0).length
 
+      // Asegurar que los ids de assignments sean comparables (números)
+      const normalizedAssignments = (assignments || []).map((a: any) => ({ ...a, id: typeof a.id === 'string' ? Number(a.id) : a.id }))
+
       const parcial1Grades = grades.filter((g: any) => {
-        const assignment = assignments.find((a: any) => a.id === g.assignmentId)
+        if (g.assignmentId == null) return false
+        const assignment = normalizedAssignments.find((a: any) => a.id === g.assignmentId)
         return assignment?.assignmentType === "parcial1"
       })
       const parcial2Grades = grades.filter((g: any) => {
-        const assignment = assignments.find((a: any) => a.id === g.assignmentId)
+        if (g.assignmentId == null) return false
+        const assignment = normalizedAssignments.find((a: any) => a.id === g.assignmentId)
         return assignment?.assignmentType === "parcial2"
       })
       const finalGrades = grades.filter((g: any) => {
-        const assignment = assignments.find((a: any) => a.id === g.assignmentId)
+        if (g.assignmentId == null) return false
+        const assignment = normalizedAssignments.find((a: any) => a.id === g.assignmentId)
         return assignment?.assignmentType === "final"
       })
 
@@ -84,6 +116,9 @@ export function PerformanceAnalytics() {
             final: avgFinal,
           },
         })
+    } catch (err) {
+      console.error('PerformanceAnalytics load error:', err)
+    }
     })()
     return () => {
       mounted = false

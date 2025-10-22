@@ -20,7 +20,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { supabaseApiClient } from "@/lib/supabase-api-client"
 import type { User, Role } from "@/lib/types"
 import { Plus, Pencil, Trash2, Search, KeyRound, AlertCircle } from "lucide-react"
 import { changeUserPassword } from "@/lib/actions/password"
