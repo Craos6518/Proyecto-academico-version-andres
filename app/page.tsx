@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { authService } from "@/lib/auth"
+import { authService, normalizeRole } from "@/lib/auth"
 import { GraduationCap, AlertCircle } from "lucide-react"
 
 export default function LoginPage() {
@@ -26,32 +26,52 @@ export default function LoginPage() {
 
     // Simulate network delay
     await new Promise((resolve) => setTimeout(resolve, 500))
+    // Hacer la autenticación en el servidor para recibir logs y token
+    let user = null
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      })
 
-    const user = authService.login(username, password)
-
-    if (user) {
-      // Redirect based on role
-      switch (user.roleName) {
-        case "Administrador":
-          router.push("/admin")
-          break
-        case "Director":
-          router.push("/director")
-          break
-        case "Profesor":
-          router.push("/teacher")
-          break
-        case "Estudiante":
-          router.push("/student")
-          break
-        default:
-          router.push("/")
+      if (res.ok) {
+        const body = await res.json()
+        user = body.user
+        // almacenar token y usuario en authService
+        if (body.token) {
+          try {
+            authService.setAuthToken(body.token)
+            authService.setCurrentUser({ ...body.user, token: body.token })
+          } catch (e) {
+            // noop
+          }
+        }
+      } else {
+        user = null
       }
-    } else {
+    } catch (err) {
+      console.error('fetch /api/auth/login error:', err)
+      user = null
+    }
+
+      if (user) {
+        // Redirect using normalized role
+        const roleKey = normalizeRole(user.role ?? user.roleName)
+        const routeByRole: Record<string, string> = {
+          admin: "/admin",
+          director: "/director",
+          teacher: "/teacher",
+          student: "/student",
+        }
+        const target = routeByRole[roleKey] ?? "/"
+        router.push(target)
+        return
+      }
+
       setError("Usuario o contraseña incorrectos")
       setIsLoading(false)
     }
-  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-indigo-50 p-4">

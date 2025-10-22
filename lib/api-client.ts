@@ -13,15 +13,14 @@ import {
   type Enrollment,
 } from "./mock-data"
 
-// Simulated API client with localStorage persistence
+// Simulated API client with storage adapter (memory or localStorage)
 const STORAGE_PREFIX = "academic_"
+import { storage } from "./storage"
 
 class ApiClient {
   // Helper to get data from localStorage or use mock data
   private getData<T>(key: string, defaultData: T[]): T[] {
-    if (typeof window === "undefined") return defaultData
-
-    const stored = localStorage.getItem(STORAGE_PREFIX + key)
+    const stored = storage.getItem(STORAGE_PREFIX + key)
     if (stored) {
       try {
         return JSON.parse(stored)
@@ -33,9 +32,7 @@ class ApiClient {
   }
 
   private setData<T>(key: string, data: T[]): void {
-    if (typeof window !== "undefined") {
-      localStorage.setItem(STORAGE_PREFIX + key, JSON.stringify(data))
-    }
+    storage.setItem(STORAGE_PREFIX + key, JSON.stringify(data))
   }
 
   // Users

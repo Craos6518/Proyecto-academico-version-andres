@@ -5,44 +5,55 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
-import { apiClient } from "@/lib/api-client"
-import type { Grade, Subject, Assignment } from "@/lib/mock-data"
+// Eliminado: lógica de simulación y mock-data
 import { Calculator, Calendar } from "lucide-react"
 
 interface MyGradesProps {
-  studentId: number
+  studentId: string | number
 }
 
+
 export function MyGrades({ studentId }: MyGradesProps) {
-  const [subjects, setSubjects] = useState<Subject[]>([])
-  const [selectedSubjectId, setSelectedSubjectId] = useState<number>(0)
-  const [grades, setGrades] = useState<Grade[]>([])
-  const [assignments, setAssignments] = useState<Assignment[]>([])
+  const [subjects, setSubjects] = useState<any[]>([])
+  const [selectedSubjectId, setSelectedSubjectId] = useState<string>("")
+  const [grades, setGrades] = useState<any[]>([])
+  const [average, setAverage] = useState<number | null>(null)
+  const [loading, setLoading] = useState<boolean>(true)
+  const [error, setError] = useState<string>("")
 
   useEffect(() => {
-    const enrollments = apiClient.getEnrollmentsByStudent(studentId)
-    const enrolledSubjects = enrollments
-      .map((e) => apiClient.getSubjectById(e.subjectId))
-      .filter((s): s is Subject => s !== undefined)
-
-    setSubjects(enrolledSubjects)
-    if (enrolledSubjects.length > 0) {
-      setSelectedSubjectId(enrolledSubjects[0].id)
-    }
+    setLoading(true)
+    const token = typeof window !== "undefined" ? (require("@/lib/auth").authService.getAuthToken?.() ?? null) : null
+    fetch(`/api/student/secure-data`, {
+      credentials: 'same-origin',
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        try {
+          console.debug('[MyGrades] fetched data:', data)
+        } catch (e) {
+          // noop
+        }
+        setSubjects(data.subjects || [])
+        setGrades(data.grades || [])
+        setAverage(data.average || null)
+        if ((data.subjects || []).length > 0) {
+          setSelectedSubjectId(data.subjects[0].subject_id || "")
+        }
+        setLoading(false)
+      })
+      .catch((err) => {
+        setError("Error al cargar datos reales")
+        setLoading(false)
+      })
   }, [studentId])
 
-  useEffect(() => {
-    if (selectedSubjectId > 0) {
-      const studentGrades = apiClient.getGradesByStudentAndSubject(studentId, selectedSubjectId)
-      setGrades(studentGrades)
-      setAssignments(apiClient.getAssignmentsBySubject(selectedSubjectId))
-    }
-  }, [studentId, selectedSubjectId])
+  // Eliminado: useEffect para filtrar grades por materia
 
-  const getAssignmentDetails = (assignmentId: number) => {
-    return assignments.find((a) => a.id === assignmentId)
-  }
-
+  // Puedes agregar lógica para mostrar el tipo de evaluación si tienes ese dato en la base
   const getAssignmentTypeBadge = (type: string) => {
     switch (type) {
       case "parcial1":
@@ -56,8 +67,12 @@ export function MyGrades({ studentId }: MyGradesProps) {
     }
   }
 
-  const finalGrade = selectedSubjectId > 0 ? apiClient.calculateFinalGrade(studentId, selectedSubjectId) : null
-
+  if (loading) {
+    return <div className="text-center py-8 text-muted-foreground">Cargando datos...</div>
+  }
+  if (error) {
+    return <div className="text-center py-8 text-red-600">{error}</div>
+  }
   if (subjects.length === 0) {
     return (
       <div className="text-center py-8 text-muted-foreground">
@@ -73,94 +88,131 @@ export function MyGrades({ studentId }: MyGradesProps) {
         <div className="flex-1 max-w-sm">
           <Label htmlFor="subject">Selecciona una materia</Label>
           <Select
-            value={selectedSubjectId.toString()}
-            onValueChange={(value) => setSelectedSubjectId(Number.parseInt(value))}
+            value={selectedSubjectId}
+            onValueChange={(value) => setSelectedSubjectId(value)}
           >
             <SelectTrigger>
               <SelectValue placeholder="Selecciona una materia" />
             </SelectTrigger>
             <SelectContent>
               {subjects.map((subject) => (
-                <SelectItem key={subject.id} value={subject.id.toString()}>
-                  {subject.name} ({subject.code})
+                <SelectItem key={subject.subject_id} value={subject.subject_id}>
+                  {subject.name}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
         </div>
 
-        {finalGrade !== null && (
+        {/* Mostrar promedio de la materia seleccionada (calculated) */}
+        {selectedSubjectId && (
           <div className="text-right">
             <div className="flex items-center justify-end gap-1 text-sm text-muted-foreground mb-1">
               <Calculator className="w-4 h-4" />
-              <span>Promedio Final</span>
+              <span>Promedio Materia</span>
             </div>
-            <div className={`text-3xl font-bold ${finalGrade >= 3.0 ? "text-green-600" : "text-red-600"}`}>
-              {finalGrade.toFixed(1)}
+            <div className={`text-3xl font-bold ${(() => {
+              const subj = (subjects || []).find((s) => String(s.subject_id) === String(selectedSubjectId))
+              const subjAvg = subj?.grade ?? null
+              return subjAvg !== null && subjAvg >= 3.0 ? "text-green-600" : "text-red-600"
+            })()}`}>
+              {(() => {
+                const subj = (subjects || []).find((s) => String(s.subject_id) === String(selectedSubjectId))
+                const subjAvg = subj?.grade ?? null
+                return subjAvg !== null ? (Number(subjAvg).toFixed(2)) : "-"
+              })()}
             </div>
-            <div className="text-xs text-muted-foreground mt-1">{finalGrade >= 3.0 ? "Aprobado" : "Reprobado"}</div>
+            <div className="text-xs text-muted-foreground mt-1">{(() => {
+              const subj = (subjects || []).find((s) => String(s.subject_id) === String(selectedSubjectId))
+              const subjAvg = subj?.grade ?? null
+              return subjAvg !== null ? (subjAvg >= 3.0 ? "Aprobado" : "Reprobado") : "-"
+            })()}</div>
           </div>
         )}
       </div>
 
       {/* Grades Table */}
-      {selectedSubjectId > 0 && (
+      {selectedSubjectId && (
         <div className="border rounded-lg">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Evaluación</TableHead>
-                <TableHead>Tipo</TableHead>
-                <TableHead>Peso</TableHead>
                 <TableHead>Calificación</TableHead>
                 <TableHead>Fecha</TableHead>
-                <TableHead>Comentarios</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {grades.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground">
-                    No hay calificaciones registradas para esta materia
-                  </TableCell>
-                </TableRow>
-              ) : (
-                grades.map((grade) => {
-                  const assignment = getAssignmentDetails(grade.assignmentId)
-                  return (
-                    <TableRow key={grade.id}>
-                      <TableCell className="font-medium">{assignment?.name || "Desconocido"}</TableCell>
-                      <TableCell>{assignment && getAssignmentTypeBadge(assignment.assignmentType)}</TableCell>
-                      <TableCell>{assignment?.weight}%</TableCell>
+              {(() => {
+                // construir lookup de assignments desde subjects
+                const assignmentLookup: Record<string|number, any> = {}
+                ;(subjects || []).forEach((s: any) => {
+                  ;(s.assignments || []).forEach((a: any) => { if (a?.id) assignmentLookup[String(a.id)] = a })
+                })
+
+                const rawSelected = (grades || []).filter((g) => String(g.subject_id) === String(selectedSubjectId))
+                if (rawSelected.length === 0) {
+                  const subj = (subjects || []).find((s) => String(s.subject_id) === String(selectedSubjectId))
+                  const derived = (subj?.assignments || []).map((a: any) => ({
+                    id: a.id,
+                    name: a.title || a.name || `Evaluación ${a.id}`,
+                    score: a.studentGrade ?? null,
+                    graded_at: a.graded_at ?? a.gradedAt ?? null,
+                    comment: a.comment ?? a.description ?? null,
+                  }))
+                  if (derived.length === 0) {
+                    return (
+                      <TableRow>
+                        <TableCell colSpan={3} className="text-center text-muted-foreground">
+                          No hay calificaciones registradas para esta materia
+                        </TableCell>
+                      </TableRow>
+                    )
+                  }
+                  return derived.map((grade: any, idx: number) => (
+                    <TableRow key={`d-${idx}`}>
+                      <TableCell className="font-medium">
+                        <div>{grade.name}</div>
+                        {grade.comment && <div className="text-xs text-muted-foreground">{grade.comment}</div>}
+                      </TableCell>
                       <TableCell>
-                        <span
-                          className={`text-lg font-semibold ${grade.score >= 3.0 ? "text-green-600" : "text-red-600"}`}
-                        >
-                          {grade.score}
+                        <span className={`text-lg font-semibold ${(grade.score ?? 0) >= 3.0 ? "text-green-600" : "text-red-600"}`}>
+                          {grade.score ?? "-"}
                         </span>
                       </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                          <Calendar className="w-3 h-3" />
-                          {new Date(grade.gradedAt).toLocaleDateString("es-ES")}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{grade.comments || "-"}</TableCell>
+                      <TableCell>{grade.graded_at ? new Date(grade.graded_at).toLocaleDateString("es-ES") : "-"}</TableCell>
                     </TableRow>
-                  )
+                  ))
+                }
+
+                // enriquecer los grades con metadata de assignmentLookup cuando falte
+                const enriched = rawSelected.map((g: any) => {
+                  const a = assignmentLookup[String(g.assignment_id)]
+                  return {
+                    ...g,
+                    name: g.name ?? (a ? (a.title ?? a.name ?? `Evaluación ${g.assignment_id}`) : `Evaluación ${g.assignment_id}`),
+                    comment: g.comment ?? (a ? (a.description ?? null) : null),
+                    score: Number(g.score ?? g.grade ?? 0),
+                  }
                 })
-              )}
+
+                return enriched.map((g: any, idx: number) => (
+                  <TableRow key={`g-${idx}`}>
+                    <TableCell className="font-medium">
+                      <div>{g.name}</div>
+                      {g.comment && <div className="text-xs text-muted-foreground">{g.comment}</div>}
+                    </TableCell>
+                    <TableCell>
+                      <span className={`text-lg font-semibold ${(g.score ?? 0) >= 3.0 ? "text-green-600" : "text-red-600"}`}>
+                        {typeof g.score === 'number' ? g.score.toFixed(1) : (g.score ?? "-")}
+                      </span>
+                    </TableCell>
+                    <TableCell>{g.graded_at ? new Date(g.graded_at).toLocaleDateString("es-ES") : "-"}</TableCell>
+                  </TableRow>
+                ))
+              })()}
             </TableBody>
           </Table>
-
-          {/* Grade Calculation Info */}
-          {grades.length > 0 && (
-            <div className="p-4 bg-muted/50 border-t">
-              <p className="text-sm text-muted-foreground">
-                <strong>Cálculo del promedio:</strong> Parcial 1 (30%) + Parcial 2 (30%) + Final (40%)
-              </p>
-            </div>
-          )}
         </div>
       )}
     </div>

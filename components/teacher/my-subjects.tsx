@@ -6,8 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Separator } from "@/components/ui/separator"
-import { apiClient } from "@/lib/api-client"
-import type { Subject, Assignment, User } from "@/lib/mock-data"
+import type { Subject, Assignment, User } from "@/lib/types"
 import { BookOpen, Users, Calendar, ClipboardList, Award } from "lucide-react"
 
 interface MySubjectsProps {
@@ -22,32 +21,60 @@ export function MySubjects({ teacherId }: MySubjectsProps) {
   const [assignments, setAssignments] = useState<Assignment[]>([])
 
   useEffect(() => {
-    setSubjects(apiClient.getSubjectsByTeacher(teacherId))
+    ;(async () => {
+      try {
+        const res = await fetch(`/api/admin/subjects?teacherId=${teacherId}`)
+        if (!res.ok) throw new Error("Error fetching subjects")
+        const data: Subject[] = await res.json()
+        setSubjects(data)
+      } catch (err) {
+        console.error(err)
+      }
+    })()
   }, [teacherId])
 
   const handleViewDetails = (subject: Subject) => {
     setSelectedSubject(subject)
 
-    // Get enrolled students
-    const enrollments = apiClient.getEnrollmentsBySubject(subject.id)
-    const students = enrollments
-      .map((enrollment) => apiClient.getUserById(enrollment.studentId))
-      .filter((student): student is User => student !== undefined)
-    setEnrolledStudents(students)
+    ;(async () => {
+      try {
+        const [enrRes, assignRes, usersRes] = await Promise.all([
+          fetch(`/api/admin/enrollments?subjectId=${subject.id}`),
+          fetch(`/api/admin/assignments?subjectId=${subject.id}`),
+          fetch(`/api/admin/users`),
+        ])
 
-    // Get assignments
-    const subjectAssignments = apiClient.getAssignmentsBySubject(subject.id)
-    setAssignments(subjectAssignments)
+        if (!enrRes.ok || !assignRes.ok || !usersRes.ok) throw new Error("Error fetching details")
 
-    setDialogOpen(true)
+  const enrollments: any[] = await enrRes.json()
+        const assignmentsData: Assignment[] = await assignRes.json()
+        const allUsers: User[] = await usersRes.json()
+
+        const students = enrollments
+          .map((en: any) => allUsers.find((u) => u.id === en.studentId))
+          .filter((s): s is User => s !== undefined && s !== null)
+        // Eliminar duplicados por id
+        const uniqueStudents = students.filter((s, idx, arr) => arr.findIndex(u => u.id === s.id) === idx)
+        setEnrolledStudents(uniqueStudents)
+        setAssignments(assignmentsData)
+        setDialogOpen(true)
+      } catch (err) {
+        console.error(err)
+        alert("No se pudieron obtener los detalles de la materia")
+      }
+    })()
   }
 
   const getEnrolledStudentsCount = (subjectId: number) => {
-    return apiClient.getEnrollmentsBySubject(subjectId).length
+    // local calculation from loaded subjects/enrollments is not available here synchronously
+    // return cached if dialog open
+    if (selectedSubject?.id === subjectId) return enrolledStudents.length
+    return 0
   }
 
   const getSubjectGradesCount = (subjectId: number) => {
-    return apiClient.getGradesBySubject(subjectId).length
+    // grades are not loaded here; return 0 as placeholder. Future: add /api/teacher/grades endpoint
+    return 0
   }
 
   const formatAssignmentType = (type: string) => {
@@ -156,13 +183,13 @@ export function MySubjects({ teacherId }: MySubjectsProps) {
                     <div key={student.id} className="flex items-center gap-2 p-2 rounded-md bg-muted/50">
                       <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
                         <span className="text-xs font-medium">
-                          {student.firstName[0]}
-                          {student.lastName[0]}
+                          {(student.firstName ?? "")[0] ?? ""}
+                          {(student.lastName ?? "")[0] ?? ""}
                         </span>
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate">
-                          {student.firstName} {student.lastName}
+                          {student.firstName ?? ""} {student.lastName ?? ""}
                         </p>
                         <p className="text-xs text-muted-foreground truncate">{student.email}</p>
                       </div>
