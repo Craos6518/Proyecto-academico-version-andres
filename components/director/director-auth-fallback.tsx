@@ -5,26 +5,25 @@ import { authService } from '@/lib/auth'
 
 export default function DirectorAuthFallback() {
   useEffect(() => {
-    const token = authService.getCurrentUser()?.token
-    if (!token) {
-      // no token client-side -> redirect to home
-      window.location.href = '/'
-      return
-    }
-
-    // POST token to server to set cookie, then reload
-    fetch('/api/auth/set-token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token }),
-    })
-      .then(() => {
-        window.location.reload()
+    // Instead of posting a client-side token to set a cookie, rely on server-side cookie.
+    // Check /api/auth/me using same-origin credentials. If server has the cookie, it will return the user.
+    fetch('/api/auth/me', { method: 'GET', credentials: 'same-origin' })
+      .then((r) => {
+        if (!r.ok) throw new Error('no session')
+        return r.json()
+      })
+      .then((data) => {
+        if (data && data.user) {
+          authService.setCurrentUser(data.user)
+          window.location.reload()
+        } else {
+          window.location.href = '/'
+        }
       })
       .catch(() => {
         window.location.href = '/'
       })
   }, [])
 
-  return <div>Estableciendo sesión...</div>
+  return <div>Verificando sesión...</div>
 }

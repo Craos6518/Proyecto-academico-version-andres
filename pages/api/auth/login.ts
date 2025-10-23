@@ -55,22 +55,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const rawRole = user.roleName ?? user.role ?? user.role_name ?? ''
     const roleKey = normalizeRole(rawRole)
 
-    // Set HttpOnly cookie with token
-    const maxAge = 60 * 60 * 8 // 8h
-    const secureFlag = process.env.NODE_ENV === 'production' ? '; Secure' : ''
-    res.setHeader('Set-Cookie', `academic_auth_token=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secureFlag}`)
-
-    // Also return token in body to allow client-side pages to persist session in localStorage
-    // (Note: cookie is HttpOnly and will be used by server-side routes; token in body is for client-side persistence)
+  // Set HttpOnly cookie with token (server-side session)
+  const maxAge = 60 * 60 * 8 // 8h
+  const secureFlag = process.env.NODE_ENV === 'production' ? '; Secure' : ''
+  res.setHeader('Set-Cookie', `academic_auth_token=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secureFlag}`)
     // Normalize name fields to make client display consistent
     const firstName = (user as any).first_name ?? (user as any).firstName ?? ""
     const lastName = (user as any).last_name ?? (user as any).lastName ?? ""
     const email = (user as any).email ?? ""
   const displayName = ((user as any).display_name ?? (user as any).displayName ?? (`${firstName} ${lastName}`.trim())) || undefined
 
+    // For security, do not return the token in the JSON body. Clients should rely on the HttpOnly cookie.
     return res.status(200).json({
       ok: true,
-      token,
       user: {
         id: user.id,
         username: user.username,
