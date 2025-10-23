@@ -6,9 +6,29 @@ import { supabaseAdmin } from "../supabase-client"
 export function withAuth(handler: Function, allowedRoles: string[] = []) {
   return async (req: NextApiRequest, res: NextApiResponse) => {
     const authHeader = req.headers.authorization || req.headers.Authorization
-    const token = typeof authHeader === "string" && authHeader.startsWith("Bearer ")
+    let token = typeof authHeader === "string" && authHeader.startsWith("Bearer ")
       ? authHeader.slice(7)
       : null
+
+    // Si no viene Authorization header, intentar leer cookie HttpOnly `academic_auth_token`
+    if (!token) {
+      try {
+        // Next.js API routes may expose parsed cookies in req.cookies
+        const cookies = (req as any).cookies
+        if (cookies && cookies.academic_auth_token) {
+          token = cookies.academic_auth_token
+        } else if (typeof req.headers.cookie === 'string') {
+          // Fallback: parse cookie header manually
+          const raw = req.headers.cookie || ''
+          raw.split(';').forEach((c) => {
+            const [k, ...v] = c.trim().split('=')
+            if (k === 'academic_auth_token') token = decodeURIComponent(v.join('='))
+          })
+        }
+      } catch (e) {
+        // ignore cookie parsing errors
+      }
+    }
 
     if (!token) {
       return res.status(401).json({ error: "Token no proporcionado" })

@@ -45,12 +45,23 @@ export default function StudentDashboard() {
 
   if (!user) return null
 
+  const resolveDisplayName = (u: any) => {
+    if (!u) return "Estudiante"
+    const first = u.firstName ?? u.first_name
+    const last = u.lastName ?? u.last_name
+    if (first || last) return `${first ?? ""} ${last ?? ""}`.trim()
+    if (u.displayName) return u.displayName
+    if (u.username) return u.username
+    if (u.email) return String(u.email).split("@")[0]
+    return "Estudiante"
+  }
+
   return (
     <DashboardLayout user={user} title="Panel del Estudiante">
       <div className="space-y-6">
         <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-lg p-6">
           <h2 className="text-2xl font-bold text-gray-900 mb-2">
-            Bienvenido, {user.firstName} {user.lastName}
+            Bienvenido, {resolveDisplayName(user)}
           </h2>
           <p className="text-gray-600">Aquí puedes consultar tus calificaciones y materias inscritas</p>
         </div>

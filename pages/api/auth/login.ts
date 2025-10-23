@@ -62,12 +62,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Also return token in body to allow client-side pages to persist session in localStorage
     // (Note: cookie is HttpOnly and will be used by server-side routes; token in body is for client-side persistence)
+    // Normalize name fields to make client display consistent
+    const firstName = (user as any).first_name ?? (user as any).firstName ?? ""
+    const lastName = (user as any).last_name ?? (user as any).lastName ?? ""
+    const email = (user as any).email ?? ""
+  const displayName = ((user as any).display_name ?? (user as any).displayName ?? (`${firstName} ${lastName}`.trim())) || undefined
+
     return res.status(200).json({
       ok: true,
       token,
       user: {
         id: user.id,
         username: user.username,
+        firstName,
+        lastName,
+        displayName,
+        email,
         roleName: rawRole,
         role: roleKey,
       },
