@@ -5,7 +5,7 @@ import { authService } from '@/lib/auth'
 
 export default function DirectorAuthFallback() {
   useEffect(() => {
-    const token = authService.getAuthToken() || authService.getCurrentUser()?.token
+    const token = authService.getCurrentUser()?.token
     if (!token) {
       // no token client-side -> redirect to home
       window.location.href = '/'

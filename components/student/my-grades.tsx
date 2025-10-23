@@ -23,12 +23,8 @@ export function MyGrades({ studentId }: MyGradesProps) {
 
   useEffect(() => {
     setLoading(true)
-    const token = typeof window !== "undefined" ? (require("@/lib/auth").authService.getAuthToken?.() ?? null) : null
     fetch(`/api/student/secure-data`, {
       credentials: 'same-origin',
-      headers: {
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
     })
       .then((res) => res.json())
       .then((data) => {

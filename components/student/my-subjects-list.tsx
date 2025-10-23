@@ -17,13 +17,9 @@ export function MySubjectsList({ studentId }: MySubjectsListProps) {
 
   useEffect(() => {
     setLoading(true)
-    // Adjuntar token si existe en authService (localStorage)
-    const token = typeof window !== "undefined" ? (require("@/lib/auth").authService.getAuthToken?.() ?? null) : null
     fetch(`/api/student/secure-data`, {
       credentials: 'same-origin',
-      headers: {
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
+      headers: {},
     })
       .then((res) => res.json())
       .then((data) => {
