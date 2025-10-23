@@ -32,16 +32,8 @@ export default withAuth(async (req: NextApiRequest, res: NextApiResponse) => {
       messages = []
     }
 
-  const subjectsRaw = (enrollRes.data ?? [])
-  const gradesRaw = (gradesRes.data ?? [])
-    // DEBUG: log info útil para depuración
-    console.debug('[secure-data] studentId=', studentId, 'enrollCount=', (subjectsRaw || []).length, 'gradesResError=', gradesRes.error, 'gradesCount=', (gradesRaw || []).length)
-    try {
-      console.debug('[secure-data] enrollRes.data sample=', JSON.stringify((enrollRes.data || []).slice(0,3)))
-      console.debug('[secure-data] gradesRes.data sample=', JSON.stringify((gradesRes.data || []).slice(0,10)))
-    } catch (e) {
-      console.debug('[secure-data] debug stringify error', e)
-    }
+    const subjectsRaw = (enrollRes.data ?? [])
+    const gradesRaw = (gradesRes.data ?? [])
 
     // Mapear calificaciones por subject_id para acceso rápido
     const gradesMap: Record<number, number[]> = {}
@@ -131,15 +123,7 @@ export default withAuth(async (req: NextApiRequest, res: NextApiResponse) => {
       }
     })
 
-    // Si se pide debug, devolver los datos crudos para inspección
-    if (String(req.query.debug) === '1' || String(req.query.debug) === 'true') {
-      return res.status(200).json({
-        message: 'DEBUG - raw data',
-        enrollRaw: enrollRes.data ?? null,
-        gradesRaw: gradesRes.data ?? null,
-        assignmentsData: assignmentsData ?? null,
-      })
-    }
+    // NOTE: debug-only responses removed in cleanup
 
     // Respuesta normal para el cliente
     return res.status(200).json({

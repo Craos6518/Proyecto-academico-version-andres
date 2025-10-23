@@ -55,7 +55,15 @@ export function DashboardLayout({ children, user, title }: DashboardLayoutProps)
                 <Button variant="ghost" className="gap-2">
                   <User className="w-4 h-4" />
                   <span className="hidden sm:inline">
-                    {user.firstName} {user.lastName}
+                    {(() => {
+                      const first = (user as any).firstName ?? (user as any).first_name
+                      const last = (user as any).lastName ?? (user as any).last_name
+                      if (first || last) return `${first ?? ""} ${last ?? ""}`.trim()
+                      if ((user as any).displayName) return (user as any).displayName
+                      if ((user as any).username) return (user as any).username
+                      if ((user as any).email) return String((user as any).email).split("@")[0]
+                      return "Usuario"
+                    })()}
                   </span>
                 </Button>
               </DropdownMenuTrigger>
