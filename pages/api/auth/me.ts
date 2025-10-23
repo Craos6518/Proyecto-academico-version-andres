@@ -12,6 +12,10 @@ function extractToken(req: NextApiRequest): string | null {
   // cookie: auth_token=...
   const cookieHeader = req.headers.cookie
   if (cookieHeader) {
+    // Prefer the server-set cookie name `academic_auth_token`
+    const matchAcademic = cookieHeader.match(/academic_auth_token=([^;\s]+)/)
+    if (matchAcademic) return matchAcademic[1]
+    // Fallback to older cookie name
     const match = cookieHeader.match(/auth_token=([^;\s]+)/)
     if (match) return match[1]
   }

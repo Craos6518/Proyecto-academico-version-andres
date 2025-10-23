@@ -110,23 +110,16 @@ export const authService = {
     }
   },
 
-  setAuthToken: (token: string | null) => {
-    if (typeof window === "undefined") return
-    try {
-      if (!token) localStorage.removeItem(AUTH_TOKEN_KEY)
-      else localStorage.setItem(AUTH_TOKEN_KEY, token)
-    } catch (e) {
-      // noop
-    }
+  // Token management is intentionally removed from client-side storage.
+  // The server should use the HttpOnly cookie `academic_auth_token` as the source of truth.
+  setAuthToken: (_token: string | null) => {
+    // noop in client: cookie HttpOnly is set by server on login
+    return
   },
 
   getAuthToken: (): string | null => {
-    if (typeof window === "undefined") return null
-    try {
-      return localStorage.getItem(AUTH_TOKEN_KEY)
-    } catch (e) {
-      return null
-    }
+    // Do not expose HttpOnly cookie to JS. Return null to encourage server-side auth via cookie.
+    return null
   },
 
   logoutClient: () => {
