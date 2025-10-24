@@ -1,4 +1,6 @@
 import { redirect } from "next/navigation"
+// Forzar renderizado dinámico: esta página lee headers/cookies en el servidor.
+export const dynamic = "force-dynamic"
 import { headers, cookies } from "next/headers"
 import { verifyJWT, normalizeRole } from "@/lib/auth"
 import { DashboardLayout } from "@/components/dashboard-layout"
@@ -41,12 +43,15 @@ export default async function DirectorDashboard() {
     if (!payload) {
     // Fallback: intentar recuperar usuario desde Supabase con token (supabase access token)
     try {
-      // Fallback: utilizar el endpoint interno /api/auth/me para obtener info del token
-      const meRes = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/api/auth/me`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (!meRes.ok) return redirect("/")
-      const me = await meRes.json()
+        // Fallback: utilizar el endpoint interno /api/auth/me para obtener info del token
+        // En producción no forzamos localhost:3000 (fallaría en Vercel). Usar ruta relativa si
+        // NEXT_PUBLIC_SITE_URL no está configurada.
+        const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ? process.env.NEXT_PUBLIC_SITE_URL : ''
+        const meRes = await fetch(`${baseUrl}/api/auth/me`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (!meRes.ok) return redirect("/")
+        const me = await meRes.json()
       const rawRole = me.roleName ?? me.role ?? ""
       const role = normalizeRole(rawRole)
       if (role !== "director") return redirect("/")
@@ -58,8 +63,15 @@ export default async function DirectorDashboard() {
       }
 
       // Obtener estadísticas (server-side)
-      const statsRes = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/api/director/stats`, { headers: { Authorization: `Bearer ${token}` } })
-      const stats = statsRes.ok ? await statsRes.json() : { totalStudents: 0, totalTeachers: 0, totalSubjects: 0, averageGrade: 0, approvalRate: 0 }
+      // Obtener estadísticas (server-side). Proteger contra fallos de red en producción.
+      let stats = { totalStudents: 0, totalTeachers: 0, totalSubjects: 0, averageGrade: 0, approvalRate: 0 }
+      try {
+        const statsRes = await fetch(`${baseUrl}/api/director/stats`, { headers: { Authorization: `Bearer ${token}` } })
+        if (statsRes.ok) stats = await statsRes.json()
+      } catch (e) {
+        // Si falla la petición, usar valores por defecto y seguir. No queremos lanzar aquí.
+        console.error('DirectorDashboard stats fetch failed (fallback path):', e)
+      }
 
       return (
         <DashboardLayout user={user as any} title="Panel del Director">
@@ -167,8 +179,17 @@ export default async function DirectorDashboard() {
     if (rawRole !== "director") return redirect("/")
 
   // obtener stats desde server-side API usando el mismo token
-  const statsRes = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/api/director/stats`, { headers: { Authorization: `Bearer ${token}` } })
-  const stats = statsRes.ok ? await statsRes.json() : { totalStudents: 0, totalTeachers: 0, totalSubjects: 0, averageGrade: 0, approvalRate: 0 }
+  // Obtener stats desde server-side API usando el mismo token.
+  // Usar ruta relativa cuando NEXT_PUBLIC_SITE_URL no exista (evita llamadas a localhost en Vercel)
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ? process.env.NEXT_PUBLIC_SITE_URL : ''
+  let stats = { totalStudents: 0, totalTeachers: 0, totalSubjects: 0, averageGrade: 0, approvalRate: 0 }
+  try {
+    const statsRes = await fetch(`${baseUrl}/api/director/stats`, { headers: { Authorization: `Bearer ${token}` } })
+    if (statsRes.ok) stats = await statsRes.json()
+  } catch (e) {
+    console.error('DirectorDashboard stats fetch failed:', e)
+    // mantener stats por defecto
+  }
 
   const user = { id: payload.id, username: payload.username, roleName: payload.role }
 
