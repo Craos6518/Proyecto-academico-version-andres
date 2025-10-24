@@ -13,7 +13,8 @@ const JWT_SECRET = process.env.JWT_SECRET || "supersecretkey"
 const JWT_EXPIRES_IN = "2h"
 
 export interface AuthUser extends User {
-  token: string
+  // token is optional on the client side. Server will set HttpOnly cookie.
+  token?: string
 }
 
 // Genera un JWT para el usuario
@@ -92,7 +93,10 @@ export const authService = {
       if (!user) {
         localStorage.removeItem(AUTH_STORAGE_KEY)
       } else {
-        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user))
+        // Store only non-sensitive user fields. Token should not be stored in localStorage.
+        const safeUser = { ...user }
+        if (safeUser.token) delete (safeUser as any).token
+        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(safeUser))
       }
     } catch (e) {
       // noop
@@ -102,7 +106,7 @@ export const authService = {
   getCurrentUser: (): AuthUser | null => {
     if (typeof window === "undefined") return null
     try {
-      const raw = localStorage.getItem(AUTH_STORAGE_KEY)
+  const raw = localStorage.getItem(AUTH_STORAGE_KEY)
       if (!raw) return null
       return JSON.parse(raw) as AuthUser
     } catch (e) {

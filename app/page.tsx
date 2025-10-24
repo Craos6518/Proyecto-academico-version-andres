@@ -37,15 +37,13 @@ export default function LoginPage() {
 
       if (res.ok) {
         const body = await res.json()
+        // Server sets HttpOnly cookie. Client must not persist token in localStorage.
         user = body.user
-        // almacenar token y usuario en authService
-        if (body.token) {
-          try {
-            authService.setAuthToken(body.token)
-            authService.setCurrentUser({ ...body.user, token: body.token })
-          } catch (e) {
-            // noop
-          }
+        try {
+          // Persist a safe user shape (authService will strip any token if present)
+          authService.setCurrentUser(body.user)
+        } catch (e) {
+          // noop
         }
       } else {
         user = null

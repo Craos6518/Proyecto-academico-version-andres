@@ -27,6 +27,13 @@ export function DashboardLayout({ children, user, title }: DashboardLayoutProps)
   const router = useRouter()
   const [showPasswordDialog, setShowPasswordDialog] = useState(false)
 
+  // normalizar el nombre a mostrar una sola vez
+  const first = (user as any).firstName ?? (user as any).first_name
+  const last = (user as any).lastName ?? (user as any).last_name
+  const displayName = first || last
+    ? `${first ?? ""} ${last ?? ""}`.trim()
+    : (user as any).displayName ?? (user as any).username ?? ((user as any).email ? String((user as any).email).split("@")[0] : "Usuario")
+
   const handleLogout = () => {
     authService.logout()
     router.push("/")
@@ -54,28 +61,19 @@ export function DashboardLayout({ children, user, title }: DashboardLayoutProps)
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="gap-2">
                   <User className="w-4 h-4" />
-                  <span className="hidden sm:inline">
-                    {(() => {
-                      const first = (user as any).firstName ?? (user as any).first_name
-                      const last = (user as any).lastName ?? (user as any).last_name
-                      if (first || last) return `${first ?? ""} ${last ?? ""}`.trim()
-                      if ((user as any).displayName) return (user as any).displayName
-                      if ((user as any).username) return (user as any).username
-                      if ((user as any).email) return String((user as any).email).split("@")[0]
-                      return "Usuario"
-                    })()}
-                  </span>
+                  <span className="hidden sm:inline">{displayName}</span>
                 </Button>
               </DropdownMenuTrigger>
+
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuLabel>Mi Cuenta</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem disabled>
                   <User className="w-4 h-4 mr-2" />
-                  {user.email}
+                  {displayName}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onSelect={() => setShowPasswordDialog(true)}>
+                <DropdownMenuItem onClick={() => setShowPasswordDialog(true)}>
                   <Key className="w-4 h-4 mr-2" />
                   Cambiar Contraseña
                 </DropdownMenuItem>
