@@ -40,14 +40,25 @@ export default async function DirectorDashboard() {
     }
 
     const payload = verifyJWT(token)
+    // Helper: construir una URL absoluta para llamadas server-side a rutas internas.
+    // Prefiere NEXT_PUBLIC_SITE_URL si está configurada, sino usa headers() para
+    // derivar el host/protocolo (funciona en Vercel). Como último recurso, usa
+    // localhost para entorno de desarrollo.
+    const makeAbsolute = (path: string) => {
+      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "")
+      if (siteUrl && siteUrl.length) return `${siteUrl}${path}`
+      const hdrsLocal = headers()
+      const host = hdrsLocal.get("x-forwarded-host") || hdrsLocal.get("host")
+      const proto = hdrsLocal.get("x-forwarded-proto") || "https"
+      if (host) return `${proto}://${host}${path}`
+      return `http://localhost:3000${path}`
+    }
     if (!payload) {
     // Fallback: intentar recuperar usuario desde Supabase con token (supabase access token)
     try {
         // Fallback: utilizar el endpoint interno /api/auth/me para obtener info del token
-        // En producción no forzamos localhost:3000 (fallaría en Vercel). Usar ruta relativa si
-        // NEXT_PUBLIC_SITE_URL no está configurada.
-        const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ? process.env.NEXT_PUBLIC_SITE_URL : ''
-        const meRes = await fetch(`${baseUrl}/api/auth/me`, {
+        // Construir una URL absoluta para evitar errores con fetch en el runtime server.
+        const meRes = await fetch(makeAbsolute('/api/auth/me'), {
           headers: { Authorization: `Bearer ${token}` },
         })
         if (!meRes.ok) return redirect("/")
@@ -66,7 +77,7 @@ export default async function DirectorDashboard() {
       // Obtener estadísticas (server-side). Proteger contra fallos de red en producción.
       let stats = { totalStudents: 0, totalTeachers: 0, totalSubjects: 0, averageGrade: 0, approvalRate: 0 }
       try {
-        const statsRes = await fetch(`${baseUrl}/api/director/stats`, { headers: { Authorization: `Bearer ${token}` } })
+        const statsRes = await fetch(makeAbsolute('/api/director/stats'), { headers: { Authorization: `Bearer ${token}` } })
         if (statsRes.ok) stats = await statsRes.json()
       } catch (e) {
         // Si falla la petición, usar valores por defecto y seguir. No queremos lanzar aquí.
@@ -179,12 +190,10 @@ export default async function DirectorDashboard() {
     if (rawRole !== "director") return redirect("/")
 
   // obtener stats desde server-side API usando el mismo token
-  // Obtener stats desde server-side API usando el mismo token.
-  // Usar ruta relativa cuando NEXT_PUBLIC_SITE_URL no exista (evita llamadas a localhost en Vercel)
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ? process.env.NEXT_PUBLIC_SITE_URL : ''
+  // Construir URL absoluta usando el helper makeAbsolute (evita errores de URL relativa en runtime)
   let stats = { totalStudents: 0, totalTeachers: 0, totalSubjects: 0, averageGrade: 0, approvalRate: 0 }
   try {
-    const statsRes = await fetch(`${baseUrl}/api/director/stats`, { headers: { Authorization: `Bearer ${token}` } })
+    const statsRes = await fetch(makeAbsolute('/api/director/stats'), { headers: { Authorization: `Bearer ${token}` } })
     if (statsRes.ok) stats = await statsRes.json()
   } catch (e) {
     console.error('DirectorDashboard stats fetch failed:', e)

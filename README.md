@@ -16,8 +16,7 @@ Alojamiento (producción): Vercel
 > Los cambios realizados en el entorno de depuración (v0.app) se sincronizan automáticamente con este repositorio, y Vercel despliega siempre la versión más reciente.
 
 🔗 Aplicación en producción:
-https://vercel.com/craos-projects/v0-academic-note-system
-
+https://proyecto-academico-version-andres-git-main-craos-projects.vercel.app
 ---
 
 🧩 Tecnologías principales
