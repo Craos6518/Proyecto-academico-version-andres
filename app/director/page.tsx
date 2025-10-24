@@ -22,12 +22,23 @@ async function getTokenFromRequest() {
 }
 
 export default async function DirectorDashboard() {
-  // Server-side auth: verificar token y role
-  const token = await getTokenFromRequest()
-  if (!token) return redirect("/")
+  try {
+    // Server-side auth: verificar token y role
+    const token = await getTokenFromRequest()
+    if (!token) {
+      console.warn("DirectorDashboard: token missing")
+      return redirect("/")
+    }
 
-  const payload = verifyJWT(token)
-  if (!payload) {
+    // Añadir logging mínimo para depuración en producción (no imprimir token completo)
+    try {
+      console.log(`DirectorDashboard: token type=${typeof token} length=${String(token).length}`)
+    } catch (e) {
+      // noop
+    }
+
+    const payload = verifyJWT(token)
+    if (!payload) {
     // Fallback: intentar recuperar usuario desde Supabase con token (supabase access token)
     try {
       // Fallback: utilizar el endpoint interno /api/auth/me para obtener info del token
@@ -151,9 +162,9 @@ export default async function DirectorDashboard() {
     }
   }
 
-  // token decodificado con verifyJWT
-  const rawRole = payload.role
-  if (rawRole !== "director") return redirect("/")
+    // token decodificado con verifyJWT
+    const rawRole = payload.role
+    if (rawRole !== "director") return redirect("/")
 
   // obtener stats desde server-side API usando el mismo token
   const statsRes = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/api/director/stats`, { headers: { Authorization: `Bearer ${token}` } })
@@ -255,4 +266,9 @@ export default async function DirectorDashboard() {
       </div>
     </DashboardLayout>
   )
+  } catch (err) {
+    // Loguear stack trace para investigar la causa raíz sin mostrar la página de error al usuario
+    console.error("DirectorDashboard unexpected error:", err)
+    return redirect("/")
+  }
 }
