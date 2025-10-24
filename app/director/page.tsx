@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation"
 import { headers, cookies } from "next/headers"
 import { verifyJWT, normalizeRole } from "@/lib/auth"
+import { getServerBaseUrl } from "@/lib/server-url"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -31,7 +32,7 @@ export default async function DirectorDashboard() {
     // Fallback: intentar recuperar usuario desde Supabase con token (supabase access token)
     try {
       // Fallback: utilizar el endpoint interno /api/auth/me para obtener info del token
-      const meRes = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/api/auth/me`, {
+      const meRes = await fetch(new URL("/api/auth/me", getServerBaseUrl(headers())).toString(), {
         headers: { Authorization: `Bearer ${token}` },
       })
       if (!meRes.ok) return redirect("/")
@@ -46,8 +47,8 @@ export default async function DirectorDashboard() {
         roleName: rawRole,
       }
 
-      // Obtener estadísticas (server-side)
-      const statsRes = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/api/director/stats`, { headers: { Authorization: `Bearer ${token}` } })
+  // Obtener estadísticas (server-side)
+  const statsRes = await fetch(new URL("/api/director/stats", getServerBaseUrl(headers())).toString(), { headers: { Authorization: `Bearer ${token}` } })
       const stats = statsRes.ok ? await statsRes.json() : { totalStudents: 0, totalTeachers: 0, totalSubjects: 0, averageGrade: 0, approvalRate: 0 }
 
       return (
@@ -156,7 +157,7 @@ export default async function DirectorDashboard() {
   if (rawRole !== "director") return redirect("/")
 
   // obtener stats desde server-side API usando el mismo token
-  const statsRes = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/api/director/stats`, { headers: { Authorization: `Bearer ${token}` } })
+  const statsRes = await fetch(new URL("/api/director/stats", getServerBaseUrl(headers())).toString(), { headers: { Authorization: `Bearer ${token}` } })
   const stats = statsRes.ok ? await statsRes.json() : { totalStudents: 0, totalTeachers: 0, totalSubjects: 0, averageGrade: 0, approvalRate: 0 }
 
   const user = { id: payload.id, username: payload.username, roleName: payload.role }
