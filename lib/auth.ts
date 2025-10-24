@@ -1,10 +1,10 @@
-"use client"
-
-import { apiClient } from "./api-client"
-import type { User } from "./mock-data"
+import type { User } from "./types"
+import bcrypt from "bcryptjs"
 import jwt from "jsonwebtoken"
+// Import dinámico de `supabase-api-client` cuando sea necesario en runtime (server-only)
 
 const AUTH_STORAGE_KEY = "academic_auth_user"
+const AUTH_TOKEN_KEY = "academic_auth_token"
 
 // Clave secreta para firmar los JWT (en producción usar variable de entorno)
 const JWT_SECRET = process.env.JWT_SECRET || "supersecretkey"
@@ -13,16 +13,20 @@ const JWT_SECRET = process.env.JWT_SECRET || "supersecretkey"
 const JWT_EXPIRES_IN = "2h"
 
 export interface AuthUser extends User {
-  token: string
+  // token is optional on the client side. Server will set HttpOnly cookie.
+  token?: string
 }
 
 // Genera un JWT para el usuario
 export function generateJWT(user: User) {
+  // Normalizar rol antes de firmar
+  const rawRole = (user as any)?.role ?? (user as any)?.roleName ?? (user as any)?.role_name ?? ""
+  const roleKey = normalizeRole(rawRole)
   return jwt.sign(
     {
       id: user.id,
       username: user.username,
-      role: user.role,
+      role: roleKey,
     },
     JWT_SECRET,
     { expiresIn: JWT_EXPIRES_IN }
@@ -38,47 +42,35 @@ export function verifyJWT(token: string): null | { id: string; username: string;
   }
 }
 
+// Normaliza distintos nombres de rol (español/ingles/underscore) a claves canónicas
+export function normalizeRole(value: string | undefined | null): string {
+  if (!value) return ""
+  const v = String(value).trim().toLowerCase()
+  // mapeos comunes
+  if (["admin", "administrador", "administrador(a)", "administradorx"].includes(v)) return "admin"
+  if (["director", "direcctor", "head", "headmaster"].includes(v)) return "director"
+  if (["teacher", "profesor", "profesora", "docente", "profesor(a)"].includes(v)) return "teacher"
+  if (["student", "estudiante", "alumno", "alumna"].includes(v)) return "student"
+  // role_name snake_case or other forms
+  if (v === "role_admin" || v === "role_admin") return "admin"
+  // fallback: devuelve la cadena limpia (sin espacios)
+  return v
+}
+
 export const authService = {
+  // Legacy sync login (kept for compatibility with parts of the app that still use it)
   login: (username: string, password: string): AuthUser | null => {
-    const users = apiClient.getUsers()
-    const user = users.find((u) => u.username === username)
-
-    if (user && user.password === password) {
-      const authUser: AuthUser = {
-        ...user,
-        token: `mock_token_${user.id}_${Date.now()}`,
-      }
-
-      // Store in localStorage
-      if (typeof window !== "undefined") {
-        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(authUser))
-      }
-
-      return authUser
-    }
-
+    // Legacy sync login removed: after migration use `loginAsync` / Supabase Auth.
     return null
   },
 
+  // Logout local (noop). Use Supabase Auth for real session management.
   logout: () => {
-    if (typeof window !== "undefined") {
-      localStorage.removeItem(AUTH_STORAGE_KEY)
-    }
+    return
   },
 
-  getCurrentUser: (): AuthUser | null => {
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem(AUTH_STORAGE_KEY)
-      if (stored) {
-        try {
-          return JSON.parse(stored)
-        } catch {
-          return null
-        }
-      }
-    }
-    return null
-  },
+  // Legacy sync getter (deprecated)
+  // (Legacy getter removed) use the persisted `getCurrentUser` implemented below which reads localStorage
 
   isAuthenticated: (): boolean => {
     return authService.getCurrentUser() !== null
@@ -90,10 +82,106 @@ export const authService = {
   },
 
   updateCurrentUser: (updates: Partial<User>): void => {
-    const currentUser = authService.getCurrentUser()
-    if (currentUser && typeof window !== "undefined") {
-      const updatedUser = { ...currentUser, ...updates }
-      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(updatedUser))
+    // noop: updates should be performed via supabaseApiClient.updateUser
+    return
+  },
+
+  // Persistencia en cliente (localStorage)
+  setCurrentUser: (user: AuthUser | null) => {
+    if (typeof window === "undefined") return
+    try {
+      if (!user) {
+        localStorage.removeItem(AUTH_STORAGE_KEY)
+      } else {
+        // Store only non-sensitive user fields. Token should not be stored in localStorage.
+        const safeUser = { ...user }
+        if (safeUser.token) delete (safeUser as any).token
+        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(safeUser))
+      }
+    } catch (e) {
+      // noop
     }
   },
+
+  getCurrentUser: (): AuthUser | null => {
+    if (typeof window === "undefined") return null
+    try {
+  const raw = localStorage.getItem(AUTH_STORAGE_KEY)
+      if (!raw) return null
+      return JSON.parse(raw) as AuthUser
+    } catch (e) {
+      return null
+    }
+  },
+
+  // Token management is intentionally removed from client-side storage.
+  // The server should use the HttpOnly cookie `academic_auth_token` as the source of truth.
+  setAuthToken: (_token: string | null) => {
+    // noop in client: cookie HttpOnly is set by server on login
+    return
+  },
+
+  getAuthToken: (): string | null => {
+    // Do not expose HttpOnly cookie to JS. Return null to encourage server-side auth via cookie.
+    return null
+  },
+
+  logoutClient: () => {
+    if (typeof window === "undefined") return
+    try {
+      localStorage.removeItem(AUTH_TOKEN_KEY)
+      localStorage.removeItem(AUTH_STORAGE_KEY)
+    } catch (e) {
+      // noop
+    }
+  },
+
+  // New async methods that use Supabase (server/async flows)
+  loginAsync: async (username: string, password: string) => {
+    return await loginWithSupabase(username, password)
+  },
+
+  getCurrentUserAsync: async (idOrEmail: number | string) => {
+    // Busca por id o por email según tipo
+    if (!idOrEmail) return null
+    try {
+      // Import dinámico para evitar bundling en cliente
+      const { supabaseApiClient } = await import("./supabase-api-client")
+      if (typeof idOrEmail === "number") {
+        return await supabaseApiClient.getUserById(idOrEmail as number)
+      }
+      // por email
+      const users = await supabaseApiClient.getUsers()
+      return users.find((u) => u.email === idOrEmail) ?? null
+    } catch (err) {
+      console.error("getCurrentUserAsync error:", err)
+      return null
+    }
+  },
+}
+
+// Nueva función async para login usando Supabase como fuente de usuarios.
+// No reemplaza automáticamente el `authService.login` para evitar romper consumidores.
+export async function loginWithSupabase(username: string, password: string) {
+  const { supabaseApiClient } = await import("./supabase-api-client")
+  const user = await supabaseApiClient.getUserByUsername(username)
+  if (!user) return null
+
+  const hash = (user as any).password_hash || (user as any).passwordHash || (user as any).password
+  if (!hash) return null
+
+  try {
+    const match = bcrypt.compareSync(password, String(hash))
+    if (!match) return null
+  } catch (err) {
+    console.error("bcrypt compare error:", err)
+    return null
+  }
+
+  const authUser: AuthUser = {
+    ...user,
+    token: `supabase_token_${user.id}_${Date.now()}`,
+  }
+
+  return authUser
 }

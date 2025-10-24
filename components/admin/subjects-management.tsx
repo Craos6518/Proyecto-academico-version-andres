@@ -18,8 +18,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { apiClient } from "@/lib/api-client"
-import type { Subject } from "@/lib/mock-data"
+import type { Subject } from "@/lib/types"
 import { Plus, Pencil, Trash2, Search } from "lucide-react"
 
 export function SubjectsManagement() {
@@ -35,43 +34,45 @@ export function SubjectsManagement() {
     teacherId: 0,
   })
 
-  const teachers = apiClient.getUsers().filter((u) => u.roleName === "Profesor")
+  const [teachers, setTeachers] = useState<any[]>([])
 
   useEffect(() => {
     loadSubjects()
+    fetch('/api/admin/users')
+      .then((r) => r.json())
+      .then((data) => setTeachers((data || []).filter((u: any) => (u.roleName ?? u.role_name) === 'Profesor')))
+      .catch((err) => console.error('Failed to load teachers', err))
   }, [])
 
   const loadSubjects = () => {
-    setSubjects(apiClient.getSubjects())
+    fetch('/api/admin/subjects')
+      .then((r) => r.json())
+      .then((data) => setSubjects(data || []))
+      .catch((err) => console.error('Failed to load subjects', err))
   }
 
   const filteredSubjects = subjects.filter(
     (subject) =>
       subject.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       subject.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      subject.teacherName.toLowerCase().includes(searchTerm.toLowerCase()),
+  (subject.teacherName || "").toLowerCase().includes(searchTerm.toLowerCase()),
   )
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
 
     const teacher = teachers.find((t) => t.id === formData.teacherId)
+    const payload = { ...formData, teacherName: teacher ? `${teacher.firstName} ${teacher.lastName}` : "" }
 
     if (editingSubject) {
-      apiClient.updateSubject(editingSubject.id, {
-        ...formData,
-        teacherName: teacher ? `${teacher.firstName} ${teacher.lastName}` : "",
-      })
+      fetch('/api/admin/subjects', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: editingSubject.id, ...payload }) })
+        .then(() => { loadSubjects(); setIsDialogOpen(false); resetForm() })
+        .catch((err) => console.error('Failed to update subject', err))
     } else {
-      apiClient.createSubject({
-        ...formData,
-        teacherName: teacher ? `${teacher.firstName} ${teacher.lastName}` : "",
-      })
+      fetch('/api/admin/subjects', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+        .then(() => { loadSubjects(); setIsDialogOpen(false); resetForm() })
+        .catch((err) => console.error('Failed to create subject', err))
     }
-
-    loadSubjects()
-    setIsDialogOpen(false)
-    resetForm()
   }
 
   const handleEdit = (subject: Subject) => {
@@ -79,17 +80,18 @@ export function SubjectsManagement() {
     setFormData({
       name: subject.name,
       code: subject.code,
-      description: subject.description,
-      credits: subject.credits,
-      teacherId: subject.teacherId,
+  description: subject.description || "",
+  credits: subject.credits ?? 0,
+  teacherId: subject.teacherId ?? 0,
     })
     setIsDialogOpen(true)
   }
 
   const handleDelete = (id: number) => {
     if (confirm("¿Estás seguro de eliminar esta materia?")) {
-      apiClient.deleteSubject(id)
-      loadSubjects()
+      fetch(`/api/admin/subjects?id=${id}`, { method: 'DELETE' })
+        .then(() => loadSubjects())
+        .catch((err) => console.error('Failed to delete subject', err))
     }
   }
 

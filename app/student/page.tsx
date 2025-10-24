@@ -2,13 +2,13 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { authService } from "@/lib/auth"
+import { authService, normalizeRole } from "@/lib/auth"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { MyGrades } from "@/components/student/my-grades"
 import { MySubjectsList } from "@/components/student/my-subjects-list"
 import { BookOpen, TrendingUp, Award, AlertCircle } from "lucide-react"
-import { apiClient } from "@/lib/api-client"
+// importación eliminada: apiClient
 
 export default function StudentDashboard() {
   const router = useRouter()
@@ -22,46 +22,46 @@ export default function StudentDashboard() {
 
   useEffect(() => {
     const currentUser = authService.getCurrentUser()
-    if (!currentUser || currentUser.roleName !== "Estudiante") {
+
+    if (!currentUser || normalizeRole(currentUser.role ?? currentUser.roleName) !== "student") {
       router.push("/")
       return
     }
     setUser(currentUser)
 
-    // Calculate student stats
-    const enrollments = apiClient.getEnrollmentsByStudent(currentUser.id)
-    const grades = apiClient.getGradesByStudent(currentUser.id)
-
-    if (grades.length > 0) {
-      const scores = grades.map((g) => g.score)
-      const average = scores.reduce((sum, score) => sum + score, 0) / scores.length
-      const highest = Math.max(...scores)
-      const lowest = Math.min(...scores)
-
-      setStats({
-        enrolledSubjects: enrollments.length,
-        averageGrade: Math.round(average * 10) / 10,
-        highestGrade: highest,
-        lowestGrade: lowest,
+    // Fetch student stats from server (Supabase)
+    fetch(`/api/student/stats?studentId=${currentUser.id}`)
+      .then((r) => r.json())
+      .then((data) => {
+        setStats({
+          enrolledSubjects: data.enrolledSubjects,
+          averageGrade: data.averageGrade,
+          highestGrade: data.highestGrade,
+          lowestGrade: data.lowestGrade,
+        })
       })
-    } else {
-      setStats({
-        enrolledSubjects: enrollments.length,
-        averageGrade: 0,
-        highestGrade: 0,
-        lowestGrade: 0,
-      })
-    }
+      .catch((err) => console.error("Failed to load student stats", err))
   }, [router])
 
   if (!user) return null
+
+  const resolveDisplayName = (u: any) => {
+    if (!u) return "Estudiante"
+    const first = u.firstName ?? u.first_name
+    const last = u.lastName ?? u.last_name
+    if (first || last) return `${first ?? ""} ${last ?? ""}`.trim()
+    if (u.displayName) return u.displayName
+    if (u.username) return u.username
+    if (u.email) return String(u.email).split("@")[0]
+    return "Estudiante"
+  }
 
   return (
     <DashboardLayout user={user} title="Panel del Estudiante">
       <div className="space-y-6">
         <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-lg p-6">
           <h2 className="text-2xl font-bold text-gray-900 mb-2">
-            Bienvenido, {user.firstName} {user.lastName}
+            Bienvenido, {resolveDisplayName(user)}
           </h2>
           <p className="text-gray-600">Aquí puedes consultar tus calificaciones y materias inscritas</p>
         </div>
@@ -70,9 +70,8 @@ export default function StudentDashboard() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Materias Inscritas</CardTitle>
-              <BookOpen className="w-4 h-4 text-muted-foreground" />
-            </CardHeader>
+                <BookOpen className="w-4 h-4 text-muted-foreground" />
+              </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{stats.enrolledSubjects}</div>
             </CardContent>

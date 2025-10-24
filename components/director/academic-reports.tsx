@@ -1,12 +1,11 @@
-"use client"
-
-import { useState, useEffect } from "react"
+import React from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { apiClient } from "@/lib/api-client"
-import type { Subject, User } from "@/lib/mock-data"
+import { supabaseApiClient } from "@/lib/supabase-api-client"
+import { normalizeRole } from "@/lib/auth"
+import type { Subject, User } from "@/lib/types"
 import { BookOpen, TrendingUp, TrendingDown, Minus } from "lucide-react"
 
 interface SubjectReport {
@@ -17,21 +16,16 @@ interface SubjectReport {
   totalGrades: number
 }
 
-export function AcademicReports() {
-  const [subjectReports, setSubjectReports] = useState<SubjectReport[]>([])
-  const [studentReports, setStudentReports] = useState<
-    Array<{ student: User; enrolledSubjects: number; averageGrade: number; approvalRate: number }>
-  >([])
+export default async function AcademicReports(): Promise<JSX.Element> {
+  // Ejecutar en servidor: obtener datos con el cliente server-only
+  const subjects = await supabaseApiClient.getSubjects()
 
-  useEffect(() => {
-    // Generate subject reports
-    const subjects = apiClient.getSubjects()
-    const reports: SubjectReport[] = subjects.map((subject) => {
-      const enrollments = apiClient.getEnrollmentsBySubject(subject.id)
-      const grades = apiClient.getGradesBySubject(subject.id)
+  const subjectReports: SubjectReport[] = await Promise.all(
+    subjects.map(async (subject) => {
+      const enrollments = await supabaseApiClient.getEnrollmentsBySubject(subject.id)
+      const grades = await supabaseApiClient.getGradesBySubject(subject.id)
 
       const averageGrade = grades.length > 0 ? grades.reduce((sum, g) => sum + g.score, 0) / grades.length : 0
-
       const approvedGrades = grades.filter((g) => g.score >= 3.0).length
       const approvalRate = grades.length > 0 ? (approvedGrades / grades.length) * 100 : 0
 
@@ -42,31 +36,30 @@ export function AcademicReports() {
         approvalRate: Math.round(approvalRate * 10) / 10,
         totalGrades: grades.length,
       }
-    })
+    }),
+  )
 
-    setSubjectReports(reports)
+  const users = await supabaseApiClient.getUsers()
+  const students = users.filter((u) => normalizeRole(u.role ?? u.roleName) === "student")
 
-    // Generate student reports
-    const students = apiClient.getUsers().filter((u) => u.roleName === "Estudiante")
-    const studentReportsData = students.map((student) => {
-      const enrollments = apiClient.getEnrollmentsByStudent(student.id)
-      const grades = apiClient.getGradesByStudent(student.id)
+  const studentReports: Array<{ student: User; enrolledSubjects: number; averageGrade: number; approvalRate: number }> =
+    await Promise.all(
+      students.map(async (student) => {
+        const enrollments = await supabaseApiClient.getEnrollmentsByStudent(student.id)
+        const grades = await supabaseApiClient.getGradesByStudent(student.id)
 
-      const averageGrade = grades.length > 0 ? grades.reduce((sum, g) => sum + g.score, 0) / grades.length : 0
+        const averageGrade = grades.length > 0 ? grades.reduce((sum, g) => sum + g.score, 0) / grades.length : 0
+        const approvedGrades = grades.filter((g) => g.score >= 3.0).length
+        const approvalRate = grades.length > 0 ? (approvedGrades / grades.length) * 100 : 0
 
-      const approvedGrades = grades.filter((g) => g.score >= 3.0).length
-      const approvalRate = grades.length > 0 ? (approvedGrades / grades.length) * 100 : 0
-
-      return {
-        student,
-        enrolledSubjects: enrollments.length,
-        averageGrade: Math.round(averageGrade * 10) / 10,
-        approvalRate: Math.round(approvalRate * 10) / 10,
-      }
-    })
-
-    setStudentReports(studentReportsData)
-  }, [])
+        return {
+          student,
+          enrolledSubjects: enrollments.length,
+          averageGrade: Math.round(averageGrade * 10) / 10,
+          approvalRate: Math.round(approvalRate * 10) / 10,
+        }
+      }),
+    )
 
   const getTrendIcon = (value: number) => {
     if (value >= 4.0) return <TrendingUp className="w-4 h-4 text-green-600" />
@@ -205,3 +198,4 @@ export function AcademicReports() {
     </div>
   )
 }
+
