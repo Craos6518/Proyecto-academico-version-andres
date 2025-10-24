@@ -33,6 +33,10 @@ export function EnrollmentsManagement() {
     subjectId: 0,
     status: "active" as const,
   })
+  const [deleteCandidate, setDeleteCandidate] = useState<Enrollment | null>(null)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [deleteErrorMessage, setDeleteErrorMessage] = useState<string | null>(null)
 
   useEffect(() => {
     loadData()
@@ -131,18 +135,32 @@ export function EnrollmentsManagement() {
     })()
   }
 
-  const handleDelete = (id: number) => {
-    if (confirm("¿Estás seguro de eliminar esta inscripción?")) {
-      ;(async () => {
-        try {
-          const res = await fetch(`/api/admin/enrollments?id=${id}`, { method: "DELETE" })
-          if (!res.ok) throw new Error("Error deleting enrollment")
-          await loadData()
-        } catch (err) {
-          console.error(err)
-          alert("No se pudo eliminar la inscripción. Revisa la consola.")
-        }
-      })()
+  const handleDelete = (enrollment: Enrollment) => {
+    setDeleteCandidate(enrollment)
+    setDeleteErrorMessage(null)
+    setIsDeleteDialogOpen(true)
+  }
+
+  const confirmDelete = async () => {
+    if (!deleteCandidate) return
+    setIsDeleting(true)
+    try {
+      const res = await fetch(`/api/admin/enrollments?id=${deleteCandidate.id}`, { method: "DELETE" })
+      if (!res.ok) {
+        let msg = 'Error eliminando la inscripción'
+        try { const body = await res.json(); msg = body?.error || JSON.stringify(body) } catch (e) { try { msg = await res.text() } catch(_){} }
+        setDeleteErrorMessage(msg)
+        return
+      }
+      setIsDeleteDialogOpen(false)
+      setDeleteCandidate(null)
+      setDeleteErrorMessage(null)
+      await loadData()
+    } catch (err) {
+      console.error(err)
+      setDeleteErrorMessage('No se pudo eliminar la inscripción. Revisa la consola.')
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -275,6 +293,37 @@ export function EnrollmentsManagement() {
             </form>
           </DialogContent>
         </Dialog>
+      
+        {/* Delete confirmation dialog for enrollments */}
+        <Dialog
+          open={isDeleteDialogOpen}
+          onOpenChange={(open) => {
+            setIsDeleteDialogOpen(open)
+            if (!open) setDeleteCandidate(null)
+          }}
+        >
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Confirmar eliminación</DialogTitle>
+              <DialogDescription>
+                {deleteCandidate ? `Vas a eliminar la inscripción de ${deleteCandidate.studentId} en la materia ${deleteCandidate.subjectId}. Esta acción no se puede deshacer.` : '¿Estás seguro de eliminar esta inscripción?'}
+              </DialogDescription>
+            </DialogHeader>
+
+            {deleteErrorMessage && (
+              <div className="my-2 p-2 bg-red-50 border border-red-200 rounded text-sm">{deleteErrorMessage}</div>
+            )}
+
+            <div className="mt-4 flex justify-end gap-2">
+              <Button variant="secondary" onClick={() => { setIsDeleteDialogOpen(false); setDeleteCandidate(null); setDeleteErrorMessage(null); }} disabled={isDeleting}>
+                Cancelar
+              </Button>
+              <Button variant="destructive" onClick={confirmDelete} disabled={isDeleting}>
+                {isDeleting ? 'Eliminando...' : 'Eliminar'}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
 
       {/* Enrollments Table */}
@@ -322,7 +371,7 @@ export function EnrollmentsManagement() {
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" onClick={() => handleDelete(enrollment.id)}>
+                    <Button variant="ghost" size="icon" onClick={() => handleDelete(enrollment)}>
                       <Trash2 className="w-4 h-4" />
                     </Button>
                   </TableCell>

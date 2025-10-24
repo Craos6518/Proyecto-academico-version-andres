@@ -19,6 +19,9 @@ export function MySubjects({ teacherId }: MySubjectsProps) {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [enrolledStudents, setEnrolledStudents] = useState<User[]>([])
   const [assignments, setAssignments] = useState<Assignment[]>([])
+  // preload counts/maps so cards can show numbers without opening dialog
+  const [enrollmentsMap, setEnrollmentsMap] = useState<Record<number, number>>({})
+  const [assignmentsMap, setAssignmentsMap] = useState<Record<number, number>>({})
 
   useEffect(() => {
     ;(async () => {
@@ -27,6 +30,36 @@ export function MySubjects({ teacherId }: MySubjectsProps) {
         if (!res.ok) throw new Error("Error fetching subjects")
         const data: Subject[] = await res.json()
         setSubjects(data)
+        // preload enrollments and assignments counts for the fetched subjects
+        try {
+          const [enrRes, assignRes] = await Promise.all([
+            fetch(`/api/admin/enrollments`),
+            fetch(`/api/admin/assignments`),
+          ])
+          if (enrRes.ok) {
+            const allEnrollments: any[] = await enrRes.json()
+            const eMap: Record<number, number> = {}
+            allEnrollments.forEach((en) => {
+              const sid = en.subjectId ?? en.subject_id
+              if (sid == null) return
+              eMap[sid] = (eMap[sid] || 0) + 1
+            })
+            setEnrollmentsMap(eMap)
+          }
+          if (assignRes.ok) {
+            const allAssignments: Assignment[] = await assignRes.json()
+            const aMap: Record<number, number> = {}
+            allAssignments.forEach((asgmt) => {
+              const sid = asgmt.subjectId
+              if (sid == null) return
+              aMap[sid] = (aMap[sid] || 0) + 1
+            })
+            setAssignmentsMap(aMap)
+          }
+        } catch (e) {
+          // non-fatal
+          console.error('Failed to preload enrollments/assignments counts', e)
+        }
       } catch (err) {
         console.error(err)
       }
@@ -66,14 +99,16 @@ export function MySubjects({ teacherId }: MySubjectsProps) {
   }
 
   const getEnrolledStudentsCount = (subjectId: number) => {
-    // local calculation from loaded subjects/enrollments is not available here synchronously
-    // return cached if dialog open
+    // prefer preloaded map, fall back to dialog cached data
+    if (enrollmentsMap[subjectId] !== undefined) return enrollmentsMap[subjectId]
     if (selectedSubject?.id === subjectId) return enrolledStudents.length
     return 0
   }
 
   const getSubjectGradesCount = (subjectId: number) => {
-    // grades are not loaded here; return 0 as placeholder. Future: add /api/teacher/grades endpoint
+    // use preloaded assignments count as proxy for number of evaluations
+    if (assignmentsMap[subjectId] !== undefined) return assignmentsMap[subjectId]
+    if (selectedSubject?.id === subjectId) return assignments.length
     return 0
   }
 

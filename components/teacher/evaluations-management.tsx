@@ -34,6 +34,10 @@ export function EvaluationsManagement({ teacherId }: EvaluationsManagementProps)
   const [selectedSubject, setSelectedSubject] = useState<number | "all">("all")
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingAssignment, setEditingAssignment] = useState<Assignment | null>(null)
+  const [deleteCandidate, setDeleteCandidate] = useState<Assignment | null>(null)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [deleteErrorMessage, setDeleteErrorMessage] = useState<string | null>(null)
   const [formData, setFormData] = useState({
     subjectId: 0,
     name: "",
@@ -155,21 +159,36 @@ export function EvaluationsManagement({ teacherId }: EvaluationsManagementProps)
     })()
   }
 
-  const handleDelete = (id: number) => {
-    if (confirm("¿Estás seguro de eliminar esta evaluación?")) {
-      ;(async () => {
-        try {
-          const res = await fetch(`/api/teacher/assignments?id=${id}`, { method: "DELETE" })
-          if (!res.ok) throw new Error("Error deleting assignment")
-          const assignsRes = await fetch(`/api/teacher/assignments`)
-          const allAssignments = await assignsRes.json()
-          const teacherAssignments = allAssignments.filter((a: any) => subjects.some((s) => s.id === a.subjectId))
-          setAssignments(teacherAssignments)
-        } catch (err) {
-          console.error(err)
-          alert("No se pudo eliminar la evaluación")
-        }
-      })()
+  const handleDelete = (assignment: Assignment) => {
+    setDeleteCandidate(assignment)
+    setDeleteErrorMessage(null)
+    setIsDeleteDialogOpen(true)
+  }
+
+  const confirmDelete = async () => {
+    if (!deleteCandidate) return
+    setIsDeleting(true)
+    try {
+      const res = await fetch(`/api/teacher/assignments?id=${deleteCandidate.id}`, { method: "DELETE" })
+      if (!res.ok) {
+        let msg = 'Error eliminando la evaluación'
+        try { const body = await res.json(); msg = body?.error || JSON.stringify(body) } catch (e) { try { msg = await res.text() } catch(_){} }
+        setDeleteErrorMessage(msg)
+        return
+      }
+      // reload assignments
+      const assignsRes = await fetch(`/api/teacher/assignments`)
+      const allAssignments = await assignsRes.json()
+      const teacherAssignments = allAssignments.filter((a: any) => subjects.some((s) => s.id === a.subjectId))
+      setAssignments(teacherAssignments)
+      setIsDeleteDialogOpen(false)
+      setDeleteCandidate(null)
+      setDeleteErrorMessage(null)
+    } catch (err) {
+      console.error(err)
+      setDeleteErrorMessage('No se pudo eliminar la evaluación')
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -344,6 +363,37 @@ export function EvaluationsManagement({ teacherId }: EvaluationsManagementProps)
             </form>
           </DialogContent>
         </Dialog>
+      
+          {/* Delete confirmation dialog for assignments */}
+          <Dialog
+            open={isDeleteDialogOpen}
+            onOpenChange={(open) => {
+              setIsDeleteDialogOpen(open)
+              if (!open) setDeleteCandidate(null)
+            }}
+          >
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Confirmar eliminación</DialogTitle>
+                <DialogDescription>
+                  {deleteCandidate ? `Vas a eliminar la evaluación "${deleteCandidate.name}" de la materia "${getSubjectName(deleteCandidate.subjectId)}". Esta acción no se puede deshacer.` : '¿Estás seguro de eliminar esta evaluación?'}
+                </DialogDescription>
+              </DialogHeader>
+
+              {deleteErrorMessage && (
+                <div className="my-2 p-2 bg-red-50 border border-red-200 rounded text-sm">{deleteErrorMessage}</div>
+              )}
+
+              <div className="mt-4 flex justify-end gap-2">
+                <Button variant="secondary" onClick={() => { setIsDeleteDialogOpen(false); setDeleteCandidate(null); setDeleteErrorMessage(null); }} disabled={isDeleting}>
+                  Cancelar
+                </Button>
+                <Button variant="destructive" onClick={confirmDelete} disabled={isDeleting}>
+                  {isDeleting ? 'Eliminando...' : 'Eliminar'}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
       </div>
 
       {filteredAssignments.length === 0 ? (
@@ -403,7 +453,7 @@ export function EvaluationsManagement({ teacherId }: EvaluationsManagementProps)
                         <Button variant="ghost" size="icon" onClick={() => handleOpenDialog(assignment)}>
                           <Pencil className="w-4 h-4" />
                         </Button>
-                        <Button variant="ghost" size="icon" onClick={() => handleDelete(assignment.id)}>
+                        <Button variant="ghost" size="icon" onClick={() => handleDelete(assignment)}>
                           <Trash2 className="w-4 h-4" />
                         </Button>
                       </div>
