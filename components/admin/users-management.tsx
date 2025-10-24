@@ -58,19 +58,12 @@ export function UsersManagement() {
   };
 
   const handleDelete = async (userId: number) => {
+    // Usar diálogo controlado en vez de window.confirm
     if (userId === 1) return;
-    if (!window.confirm("¿Seguro que deseas eliminar este usuario?")) return;
-    try {
-      const res = await fetch(`/api/admin/users?id=${userId}`, {
-        method: 'DELETE',
-      });
-      if (!res.ok) throw new Error('Error eliminando usuario');
-      loadUsers();
-      alert('Usuario eliminado correctamente');
-    } catch (err) {
-      console.error('Failed to delete user', err);
-      alert('Error al eliminar el usuario');
-    }
+    const u = users.find((x) => x.id === userId) || null
+    setEditingUser(u)
+    setDeleteCandidate(u)
+    setIsDeleteDialogOpen(true)
   };
   const [users, setUsers] = useState<User[]>([])
   const [searchTerm, setSearchTerm] = useState("")
@@ -195,6 +188,51 @@ export function UsersManagement() {
     setConfirmPassword("")
     setPasswordError("")
     setPasswordSuccess(false)
+  }
+
+  // Estado para confirmar eliminación usando Dialog
+  const [deleteCandidate, setDeleteCandidate] = useState<User | null>(null)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  // If server replies 409, it includes references; store them to show UI and allow force
+  const [deleteReferences, setDeleteReferences] = useState<Record<string, boolean> | null>(null)
+  const [forceDelete, setForceDelete] = useState(false)
+  const [deleteErrorMessage, setDeleteErrorMessage] = useState<string | null>(null)
+
+  const confirmDelete = async () => {
+    if (!deleteCandidate) return
+    setIsDeleting(true)
+    try {
+      const url = `/api/admin/users?id=${deleteCandidate.id}${forceDelete ? "&force=1" : ""}`
+      const res = await fetch(url, {
+        method: 'DELETE',
+      })
+
+      if (res.status === 409) {
+        // Server indicates dependent records exist. Parse response to show details and allow force.
+        const body = await res.json().catch(() => ({}))
+        setDeleteReferences(body.references || null)
+        setDeleteErrorMessage(body.error || 'User has dependent records')
+        // keep dialog open so user can decide to force
+        return
+      }
+
+      if (!res.ok) throw new Error('Error eliminando usuario')
+
+      setIsDeleteDialogOpen(false)
+      setDeleteCandidate(null)
+      setDeleteReferences(null)
+      setForceDelete(false)
+      setDeleteErrorMessage(null)
+      loadUsers()
+      // mostrar feedback mínimo
+      alert('Usuario eliminado correctamente')
+    } catch (err) {
+      console.error('Failed to delete user', err)
+      alert('Error al eliminar el usuario')
+    } finally {
+      setIsDeleting(false)
+    }
   }
 
   const getRoleBadgeVariant = (roleName: string) => {
@@ -384,6 +422,58 @@ export function UsersManagement() {
           </DialogContent>
         </Dialog>
       </div>
+      
+      {/* Delete confirmation dialog */}
+      <Dialog
+        open={isDeleteDialogOpen}
+        onOpenChange={(open) => {
+          setIsDeleteDialogOpen(open)
+          if (!open) setDeleteCandidate(null)
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Confirmar eliminación</DialogTitle>
+            <DialogDescription>
+              {deleteCandidate
+                ? `Vas a eliminar al usuario "${deleteCandidate.username}". Esta acción no se puede deshacer.`
+                : "¿Estás seguro de que quieres eliminar este usuario?"}
+            </DialogDescription>
+          </DialogHeader>
+
+          {deleteReferences && (
+            <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded">
+              <p className="text-sm font-medium">El usuario tiene registros dependientes:</p>
+              <ul className="list-disc ml-5 text-sm mt-2">
+                {Object.keys(deleteReferences).map((k) => (
+                  <li key={k}>{k}</li>
+                ))}
+              </ul>
+              <div className="flex items-center gap-2 mt-3">
+                <input
+                  id="force-delete"
+                  type="checkbox"
+                  checked={forceDelete}
+                  onChange={() => setForceDelete(!forceDelete)}
+                />
+                <label htmlFor="force-delete" className="text-sm">
+                  Forzar eliminación (borra registros dependientes)
+                </label>
+              </div>
+              {deleteErrorMessage && <p className="text-sm text-muted-foreground mt-2">{deleteErrorMessage}</p>}
+            </div>
+          )}
+
+          <div className="mt-4 flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => { setIsDeleteDialogOpen(false); setDeleteReferences(null); setForceDelete(false); }} disabled={isDeleting}>
+              Cancelar
+            </Button>
+            <Button variant="destructive" onClick={confirmDelete} disabled={isDeleting}>
+              {isDeleting ? "Eliminando..." : deleteReferences ? (forceDelete ? "Eliminar y forzar" : "Eliminar") : "Eliminar"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Users Table */}
       <div className="border rounded-lg">

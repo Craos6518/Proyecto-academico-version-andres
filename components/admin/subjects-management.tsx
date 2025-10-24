@@ -26,6 +26,10 @@ export function SubjectsManagement() {
   const [searchTerm, setSearchTerm] = useState("")
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingSubject, setEditingSubject] = useState<Subject | null>(null)
+  const [deleteCandidate, setDeleteCandidate] = useState<Subject | null>(null)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [deleteErrorMessage, setDeleteErrorMessage] = useState<string | null>(null)
   const [formData, setFormData] = useState({
     name: "",
     code: "",
@@ -87,11 +91,38 @@ export function SubjectsManagement() {
     setIsDialogOpen(true)
   }
 
-  const handleDelete = (id: number) => {
-    if (confirm("¿Estás seguro de eliminar esta materia?")) {
-      fetch(`/api/admin/subjects?id=${id}`, { method: 'DELETE' })
-        .then(() => loadSubjects())
-        .catch((err) => console.error('Failed to delete subject', err))
+  const handleDelete = (subject: Subject) => {
+    setDeleteCandidate(subject)
+    setDeleteErrorMessage(null)
+    setIsDeleteDialogOpen(true)
+  }
+
+  const confirmDelete = async () => {
+    if (!deleteCandidate) return
+    setIsDeleting(true)
+    try {
+      const res = await fetch(`/api/admin/subjects?id=${deleteCandidate.id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        // try to parse JSON error, fallback to text
+        let msg = 'Error eliminando materia'
+        try {
+          const body = await res.json()
+          msg = body?.error || JSON.stringify(body)
+        } catch (e) {
+          try { msg = await res.text() } catch (_) {}
+        }
+        setDeleteErrorMessage(msg)
+        return
+      }
+      setIsDeleteDialogOpen(false)
+      setDeleteCandidate(null)
+      setDeleteErrorMessage(null)
+      await loadSubjects()
+    } catch (err) {
+      console.error('Failed to delete subject', err)
+      setDeleteErrorMessage('Error al eliminar la materia. Revisa la consola.')
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -206,6 +237,37 @@ export function SubjectsManagement() {
             </form>
           </DialogContent>
         </Dialog>
+      
+        {/* Delete confirmation dialog for subjects */}
+        <Dialog
+          open={isDeleteDialogOpen}
+          onOpenChange={(open) => {
+            setIsDeleteDialogOpen(open)
+            if (!open) setDeleteCandidate(null)
+          }}
+        >
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Confirmar eliminación</DialogTitle>
+              <DialogDescription>
+                {deleteCandidate ? `Vas a eliminar la materia "${deleteCandidate.name}" (código ${deleteCandidate.code}). Esta acción no se puede deshacer.` : '¿Estás seguro de eliminar esta materia?'}
+              </DialogDescription>
+            </DialogHeader>
+
+            {deleteErrorMessage && (
+              <div className="my-2 p-2 bg-red-50 border border-red-200 rounded text-sm">{deleteErrorMessage}</div>
+            )}
+
+            <div className="mt-4 flex justify-end gap-2">
+              <Button variant="secondary" onClick={() => { setIsDeleteDialogOpen(false); setDeleteErrorMessage(null); setDeleteCandidate(null); }} disabled={isDeleting}>
+                Cancelar
+              </Button>
+              <Button variant="destructive" onClick={confirmDelete} disabled={isDeleting}>
+                {isDeleting ? 'Eliminando...' : 'Eliminar'}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
 
       {/* Subjects Table */}
@@ -239,7 +301,7 @@ export function SubjectsManagement() {
                       <Button variant="ghost" size="icon" onClick={() => handleEdit(subject)}>
                         <Pencil className="w-4 h-4" />
                       </Button>
-                      <Button variant="ghost" size="icon" onClick={() => handleDelete(subject.id)}>
+                      <Button variant="ghost" size="icon" onClick={() => handleDelete(subject)}>
                         <Trash2 className="w-4 h-4" />
                       </Button>
                     </div>
