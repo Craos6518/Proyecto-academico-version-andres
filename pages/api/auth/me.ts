@@ -39,8 +39,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     // Buscar usuario en la tabla users por id o username
     const maybeId = Number(payload.id)
-    let data: any = null
-    let error: any = null
+  let data: unknown = null
+  let error: unknown = null
     if (!Number.isNaN(maybeId)) {
       const res = await supabaseAdmin.from('users').select('*').eq('id', maybeId).limit(1).maybeSingle()
       data = res.data
@@ -55,19 +55,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(500).json({ message: 'db error' })
     }
 
-    const user = (data as any) || null
-    if (!user) return res.status(404).json({ message: 'user not found' })
+    const userRec = (data as unknown as Record<string, unknown>) || null
+    if (!userRec) return res.status(404).json({ message: 'user not found' })
 
-    const rawRole = user.roleName ?? user.role ?? user.role_name ?? ""
+    const rawRole = (userRec['roleName'] ?? userRec['role'] ?? userRec['role_name']) as string | undefined ?? ""
     const roleKey = normalizeRole(rawRole)
     return res.status(200).json({
-      id: user.id,
-      username: user.username,
+      id: userRec['id'] as number,
+      username: (userRec['username'] ?? '') as string,
       roleName: rawRole,
       role: roleKey,
-      email: user.email,
-      firstName: user.first_name ?? user.firstName,
-      lastName: user.last_name ?? user.lastName,
+      email: (userRec['email'] ?? '') as string,
+      firstName: (userRec['first_name'] ?? userRec['firstName']) as string | undefined,
+      lastName: (userRec['last_name'] ?? userRec['lastName']) as string | undefined,
     })
   } catch (err) {
     console.error('me endpoint error:', err)

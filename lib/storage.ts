@@ -15,7 +15,7 @@ const shouldUseLocal = (() => {
     // process.env.USE_LOCAL_STORAGE is replaced at build time by Next.
     if (typeof window === 'undefined') return false
     return (process.env.USE_LOCAL_STORAGE || 'false') === 'true'
-  } catch (e) {
+  } catch {
     return false
   }
 })()
@@ -25,7 +25,7 @@ const storage: StorageLike = {
     if (shouldUseLocal && typeof globalThis !== 'undefined' && globalThis.localStorage) {
       try {
         return globalThis.localStorage.getItem(key)
-      } catch (e) {
+      } catch {
         return memory.get(key) ?? null
       }
     }
@@ -36,7 +36,7 @@ const storage: StorageLike = {
       try {
         globalThis.localStorage.setItem(key, value)
         return
-      } catch (e) {
+      } catch {
         // fallback to memory
       }
     }
@@ -47,7 +47,7 @@ const storage: StorageLike = {
       try {
         globalThis.localStorage.removeItem(key)
         return
-      } catch (e) {
+      } catch {
         // fallback
       }
     }

@@ -22,7 +22,7 @@ import { Separator } from "@/components/ui/separator"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import type { User, Role } from "@/lib/types"
 import { Plus, Pencil, Trash2, Search, KeyRound, AlertCircle } from "lucide-react"
-import { changeUserPassword } from "@/lib/actions/password"
+// removed unused import changeUserPassword
 import { authService, normalizeRole } from "@/lib/auth"
 
 export function UsersManagement() {
@@ -100,7 +100,19 @@ export function UsersManagement() {
   const loadUsers = () => {
     fetch('/api/admin/users')
       .then((r) => r.json())
-      .then((data) => setUsers(data || []))
+      .then((data) => {
+        const arr = (data || []) as Array<Record<string, unknown>>
+        const mapped: User[] = arr.map((u) => ({
+          id: Number(u['id'] ?? 0),
+          username: String(u['username'] ?? u['email'] ?? ''),
+          email: String(u['email'] ?? ''),
+          firstName: (u['firstName'] ?? u['first_name'] ?? '') as string,
+          lastName: (u['lastName'] ?? u['last_name'] ?? '') as string,
+          roleId: Number(u['roleId'] ?? u['role_id'] ?? 0),
+          roleName: String(u['roleName'] ?? u['role_name'] ?? u['role'] ?? ''),
+        }))
+        setUsers(mapped)
+      })
       .catch((err) => console.error('Failed to load users', err))
   }
 
@@ -109,7 +121,11 @@ export function UsersManagement() {
   useEffect(() => {
     fetch('/api/admin/roles')
       .then((r) => r.json())
-      .then((data) => setAvailableRoles(data || []))
+      .then((data) => {
+  const arr = (data || []) as Array<Record<string, unknown>>
+  const mapped: Role[] = arr.map((r) => ({ id: Number(r['id'] ?? 0), name: String(r['name'] ?? ''), description: String(r['description'] ?? '') }))
+  setAvailableRoles(mapped)
+      })
       .catch((err) => console.error('Failed to load roles', err))
   }, [])
 

@@ -26,12 +26,13 @@ export function EnrollmentsManagement() {
   const [students, setStudents] = useState<User[]>([])
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [searchTerm, setSearchTerm] = useState("")
-  const [filterType, setFilterType] = useState<"all" | "student" | "subject">("all")
+  // filterType was unused; removed to satisfy linter
   const [isDialogOpen, setIsDialogOpen] = useState(false)
-  const [formData, setFormData] = useState({
+  type EnrollmentForm = { studentId: number; subjectId: number; status: "active" | "completed" | "dropped" }
+  const [formData, setFormData] = useState<EnrollmentForm>({
     studentId: 0,
     subjectId: 0,
-    status: "active" as const,
+    status: "active",
   })
   const [deleteCandidate, setDeleteCandidate] = useState<Enrollment | null>(null)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
@@ -148,7 +149,16 @@ export function EnrollmentsManagement() {
       const res = await fetch(`/api/admin/enrollments?id=${deleteCandidate.id}`, { method: "DELETE" })
       if (!res.ok) {
         let msg = 'Error eliminando la inscripción'
-        try { const body = await res.json(); msg = body?.error || JSON.stringify(body) } catch (e) { try { msg = await res.text() } catch(_){} }
+        try {
+          const body = await res.json()
+          msg = body?.error || JSON.stringify(body)
+        } catch {
+          try {
+            msg = await res.text()
+          } catch {
+            // ignore
+          }
+        }
         setDeleteErrorMessage(msg)
         return
       }
@@ -274,7 +284,7 @@ export function EnrollmentsManagement() {
                   <Label htmlFor="status">Estado</Label>
                   <Select
                     value={formData.status}
-                    onValueChange={(value: any) => setFormData({ ...formData, status: value })}
+                    onValueChange={(value: string) => setFormData({ ...formData, status: value as "active" | "completed" | "dropped" })}
                   >
                     <SelectTrigger>
                       <SelectValue />

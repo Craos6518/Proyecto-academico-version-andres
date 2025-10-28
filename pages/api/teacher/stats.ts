@@ -15,14 +15,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       supabaseAdmin.from("assignments").select("*"),
     ])
 
-    const subjects = (subjectsRes.data ?? []) as any[]
-    const enrollments = (enrollmentsRes.data ?? []) as any[]
-    const grades = (gradesRes.data ?? []) as any[]
-    const assignments = (assignmentsRes.data ?? []) as any[]
+  const subjects = (subjectsRes.data ?? []) as Record<string, unknown>[]
+  const enrollments = (enrollmentsRes.data ?? []) as Record<string, unknown>[]
+  const grades = (gradesRes.data ?? []) as Record<string, unknown>[]
+  const assignments = (assignmentsRes.data ?? []) as Record<string, unknown>[]
 
-    const mySubjectIds = subjects.map((s) => s.id)
-    const studentsInMySubjects = enrollments.filter((e) => mySubjectIds.includes(e.subject_id ?? e.subjectId))
-    const gradesInMySubjects = grades.filter((g) => mySubjectIds.includes(g.subject_id ?? g.subjectId))
+  const mySubjectIds = subjects.map((s: Record<string, unknown>) => Number(s.id ?? 0))
+  const studentsInMySubjects = enrollments.filter((e: Record<string, unknown>) => mySubjectIds.includes(Number(e.subject_id ?? e.subjectId ?? 0)))
+  const gradesInMySubjects = grades.filter((g: Record<string, unknown>) => mySubjectIds.includes(Number(g.subject_id ?? g.subjectId ?? 0)))
 
     let averageGrade = 0
     if (gradesInMySubjects.length > 0) {
@@ -32,17 +32,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // pending grades calculation
     let totalPendingCount = 0
-    const pendingItems: any[] = []
+  const pendingItems: Record<string, unknown>[] = []
 
     for (const subject of subjects) {
-      const subjectAssignments = assignments.filter((a) => a.subject_id === subject.id || a.subjectId === subject.id)
-      const subjectEnrollments = enrollments.filter((e) => e.subject_id === subject.id || e.subjectId === subject.id)
+  const subjectAssignments = assignments.filter((a: Record<string, unknown>) => Number(a.subject_id ?? a.subjectId ?? 0) === Number(subject.id ?? 0))
+  const subjectEnrollments = enrollments.filter((e: Record<string, unknown>) => Number(e.subject_id ?? e.subjectId ?? 0) === Number(subject.id ?? 0))
 
       for (const assignment of subjectAssignments) {
         const assignmentGrades = grades.filter((g) => g.assignment_id === assignment.id || g.assignmentId === assignment.id)
         const studentsWithoutGrade = subjectEnrollments.length - assignmentGrades.length
         if (studentsWithoutGrade > 0) {
-          pendingItems.push({ assignmentId: assignment.id, assignmentName: assignment.name, subjectName: subject.name, dueDate: assignment.due_date ?? assignment.dueDate, studentsWithoutGrade })
+          pendingItems.push({ assignmentId: assignment.id, assignmentName: assignment.name ?? null, subjectName: subject.name ?? null, dueDate: assignment.due_date ?? assignment.dueDate ?? null, studentsWithoutGrade })
           totalPendingCount += studentsWithoutGrade
         }
       }

@@ -1,6 +1,18 @@
 import type { NextApiRequest, NextApiResponse } from "next"
 import { supabaseAdmin } from "../../../lib/supabase-client"
 
+type Assignment = {
+  id?: number
+  weight?: number
+  max_score?: number
+  maxScore?: number
+}
+
+type Grade = {
+  assignment_id?: number
+  score?: number
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
     if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" })
@@ -26,32 +38,38 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .eq("subject_id", sId)
     if (gErr) throw gErr
 
-    // Map assignments by id
-    const assignMap: Record<number, any> = {}
-    ;(assignments || []).forEach((a: any) => (assignMap[a.id] = a))
+    // Map assignments by id (typed)
+    const assignMap: Record<number, Assignment> = {}
+    ;(assignments || []).forEach((aRaw: unknown) => {
+      const a = aRaw as Assignment
+      if (a?.id !== undefined) assignMap[Number(a.id)] = a
+    })
 
     // Calculate weighted average
     let totalWeight = 0
     let weightedSum = 0
 
-    ;(grades || []).forEach((grade: any) => {
-      const a = assignMap[grade.assignment_id]
+    ;(grades || []).forEach((gradeRaw: unknown) => {
+      const grade = gradeRaw as Grade
+      const a = grade.assignment_id !== undefined ? assignMap[Number(grade.assignment_id)] : undefined
       if (!a) return
-      const weight = a.weight || 0
-      const maxScore = a.max_score ?? a.maxScore ?? 5
-      const normalized = (grade.score / maxScore) * 5 // normalize to 0-5 scale
+      const weight = Number(a.weight ?? 0)
+      const maxScore = Number(a.max_score ?? a.maxScore ?? 5)
+      const sc = Number(grade.score ?? 0)
+      const normalized = maxScore > 0 ? (sc / maxScore) * 5 : 0 // normalize to 0-5 scale
       weightedSum += normalized * (weight / 100)
       totalWeight += weight
     })
 
     if (totalWeight === 0) return res.status(200).json({ finalGrade: null })
 
-    // final grade on 0-5 scale
-    const final = weightedSum // since weights sum to 100
+    // final grade on 0-5 scale (weights are percent)
+    const final = weightedSum
 
     return res.status(200).json({ finalGrade: final })
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("teacher/calculate-final-grade error:", err)
-    return res.status(500).json({ error: err.message || "Error interno" })
+    const message = err instanceof Error ? err.message : String(err)
+    return res.status(500).json({ error: message || "Error interno" })
   }
 }

@@ -20,7 +20,8 @@ export interface AuthUser extends User {
 // Genera un JWT para el usuario
 export function generateJWT(user: User) {
   // Normalizar rol antes de firmar
-  const rawRole = (user as any)?.role ?? (user as any)?.roleName ?? (user as any)?.role_name ?? ""
+  const urec = user as unknown as Record<string, unknown>
+  const rawRole = (urec["role"] ?? urec["roleName"] ?? urec["role_name"]) as string | undefined
   const roleKey = normalizeRole(rawRole)
   return jwt.sign(
     {
@@ -37,7 +38,7 @@ export function generateJWT(user: User) {
 export function verifyJWT(token: string): null | { id: string; username: string; role: string } {
   try {
     return jwt.verify(token, JWT_SECRET) as { id: string; username: string; role: string }
-  } catch (err) {
+  } catch {
     return null
   }
 }
@@ -61,6 +62,8 @@ export const authService = {
   // Legacy sync login (kept for compatibility with parts of the app that still use it)
   login: (username: string, password: string): AuthUser | null => {
     // Legacy sync login removed: after migration use `loginAsync` / Supabase Auth.
+    void username
+    void password
     return null
   },
 
@@ -83,6 +86,7 @@ export const authService = {
 
   updateCurrentUser: (updates: Partial<User>): void => {
     // noop: updates should be performed via supabaseApiClient.updateUser
+    void updates
     return
   },
 
@@ -95,10 +99,11 @@ export const authService = {
       } else {
         // Store only non-sensitive user fields. Token should not be stored in localStorage.
         const safeUser = { ...user }
-        if (safeUser.token) delete (safeUser as any).token
+        const su = safeUser as Record<string, unknown>
+        if ("token" in su) delete su["token"]
         localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(safeUser))
       }
-    } catch (e) {
+    } catch {
       // noop
     }
   },
@@ -109,7 +114,7 @@ export const authService = {
   const raw = localStorage.getItem(AUTH_STORAGE_KEY)
       if (!raw) return null
       return JSON.parse(raw) as AuthUser
-    } catch (e) {
+    } catch {
       return null
     }
   },
@@ -118,6 +123,7 @@ export const authService = {
   // The server should use the HttpOnly cookie `academic_auth_token` as the source of truth.
   setAuthToken: (_token: string | null) => {
     // noop in client: cookie HttpOnly is set by server on login
+    void _token
     return
   },
 
@@ -131,7 +137,7 @@ export const authService = {
     try {
       localStorage.removeItem(AUTH_TOKEN_KEY)
       localStorage.removeItem(AUTH_STORAGE_KEY)
-    } catch (e) {
+    } catch {
       // noop
     }
   },
@@ -153,7 +159,7 @@ export const authService = {
       // por email
       const users = await supabaseApiClient.getUsers()
       return users.find((u) => u.email === idOrEmail) ?? null
-    } catch (err) {
+    } catch (err: unknown) {
       console.error("getCurrentUserAsync error:", err)
       return null
     }
@@ -166,14 +172,14 @@ export async function loginWithSupabase(username: string, password: string) {
   const { supabaseApiClient } = await import("./supabase-api-client")
   const user = await supabaseApiClient.getUserByUsername(username)
   if (!user) return null
-
-  const hash = (user as any).password_hash || (user as any).passwordHash || (user as any).password
+  const ru = user as unknown as Record<string, unknown>
+  const hash = (ru["password_hash"] ?? ru["passwordHash"] ?? ru["password"]) as string | undefined
   if (!hash) return null
 
   try {
     const match = bcrypt.compareSync(password, String(hash))
     if (!match) return null
-  } catch (err) {
+  } catch (err: unknown) {
     console.error("bcrypt compare error:", err)
     return null
   }

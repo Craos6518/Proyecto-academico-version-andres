@@ -83,19 +83,20 @@ export function GradeManagement({ teacherId }: GradeManagementProps) {
 
           if (!enrRes.ok || !gradesRes.ok || !assignsRes.ok || !usersRes.ok) throw new Error("Error fetching subject data")
 
-          const enrollments: any[] = await enrRes.json()
+          const enrollmentsRaw = (await enrRes.json()) as Array<Record<string, unknown>>
           const gradesData: Grade[] = await gradesRes.json()
           const assignmentsData: Assignment[] = await assignsRes.json()
           const allUsers: User[] = await usersRes.json()
 
           // Mapeo robusto para soportar studentId/student_id y assignmentId/assignment_id
           // Filtrar estudiantes únicos por ID
-          const enrolledStudents = enrollments
+          const enrolledStudents = enrollmentsRaw
             .map((e) => {
-              const sid = e.studentId ?? e.student_id;
-              return allUsers.find((u) => u.id === sid);
+              const sidRaw = e["studentId"] ?? e["student_id"] ?? e["student"] ?? null
+              const sid = sidRaw != null ? Number(sidRaw) : null
+              return sid != null ? allUsers.find((u) => u.id === sid) : undefined
             })
-            .filter((u): u is User => !!u);
+            .filter((u): u is User => !!u)
           // Si no hay inscripciones, usar todos los usuarios con rol estudiante
           const fallbackStudents = allUsers.filter((u) => normalizeRole(u.role ?? u.roleName) === "student");
           const uniqueStudents = enrolledStudents.length > 0
@@ -103,11 +104,12 @@ export function GradeManagement({ teacherId }: GradeManagementProps) {
             : fallbackStudents;
           setStudents(uniqueStudents)
           setGrades(
-            gradesData.map((g) => ({
-              ...g,
-              studentId: (g as any).studentId ?? (g as any).student_id,
-              assignmentId: (g as any).assignmentId ?? (g as any).assignment_id,
-            }))
+            gradesData.map((g) => {
+              const gr = g as unknown as Record<string, unknown>
+              const studentId = Number(gr["studentId"] ?? gr["student_id"] ?? 0)
+              const assignmentId = Number(gr["assignmentId"] ?? gr["assignment_id"] ?? 0)
+              return { ...(g as object), studentId, assignmentId } as Grade
+            })
           );
           setAssignments(
             assignmentsData.map((a) => ({
@@ -117,7 +119,7 @@ export function GradeManagement({ teacherId }: GradeManagementProps) {
           );
 
           // Fetch final grades for each student in parallel
-          const uniqueStudentIds = Array.from(new Set(enrolledStudents.map((s) => s.id)))
+          const uniqueStudentIds = Array.from(new Set(uniqueStudents.map((s) => s.id)))
           const finalsPromises = uniqueStudentIds.map((sid) =>
             fetch(`/api/teacher/calculate-final-grade?studentId=${sid}&subjectId=${selectedSubjectId}`).then((r) =>
               r.ok ? r.json().then((d) => ({ sid, final: d.finalGrade })) : { sid, final: null },
@@ -126,7 +128,10 @@ export function GradeManagement({ teacherId }: GradeManagementProps) {
 
           const finals = await Promise.all(finalsPromises)
           const finalsMap: Record<number, number | null> = {}
-          finals.forEach((f: any) => (finalsMap[f.sid] = f.final))
+          finals.forEach((f) => {
+            const fr = f as { sid: number; final: number | null }
+            if (fr && fr.sid !== undefined) finalsMap[Number(fr.sid)] = fr.final
+          })
           setFinalGradesMap(finalsMap)
         } catch (err) {
           console.error(err)
@@ -181,13 +186,14 @@ export function GradeManagement({ teacherId }: GradeManagementProps) {
         const gradesRes = await fetch(`/api/teacher/grades?subjectId=${selectedSubjectId}`)
         if (!gradesRes.ok) throw new Error("Error fetching grades")
         const gradesData: Grade[] = await gradesRes.json()
-        setGrades(
-          gradesData.map((g) => ({
-            ...g,
-            studentId: (g as any).studentId ?? (g as any).student_id,
-            assignmentId: (g as any).assignmentId ?? (g as any).assignment_id,
-          }))
-        );
+          setGrades(
+            gradesData.map((g) => {
+              const gr = g as unknown as Record<string, unknown>
+              const studentId = Number(gr["studentId"] ?? gr["student_id"] ?? 0)
+              const assignmentId = Number(gr["assignmentId"] ?? gr["assignment_id"] ?? 0)
+              return { ...(g as object), studentId, assignmentId } as Grade
+            })
+          )
 
         setIsDialogOpen(false)
         resetForm()
@@ -271,11 +277,10 @@ export function GradeManagement({ teacherId }: GradeManagementProps) {
     }
   }
 
-  const calculateFinalGrade = (studentId: number) => {
-    // Call server-side calculation
-    // Note: this is synchronous in original UI; we perform a quick fetch and return cached value if available
-    // For table rendering we call the API synchronously via a cached map
-    return null as any
+  const calculateFinalGrade = (studentId: number): number | null => {
+    // Return cached final grade if available, otherwise null
+    const val = finalGradesMap[studentId]
+    return val !== undefined ? (val as number | null) : null
   }
 
   return (
@@ -444,17 +449,11 @@ export function GradeManagement({ teacherId }: GradeManagementProps) {
                         <span className={grade.score >= 3.0 ? "text-green-600" : "text-red-600"}>{grade.score}</span>
                       </TableCell>
                       <TableCell>
-                        {finalGradesMap[grade.studentId] !== undefined && finalGradesMap[grade.studentId] !== null ? (
+                        {finalGrade !== null ? (
                           <div className="flex items-center gap-2">
                             <Calculator className="w-4 h-4 text-muted-foreground" />
-                            <span
-                              className={
-                                (finalGradesMap[grade.studentId] as number) >= 3.0
-                                  ? "text-green-600 font-medium"
-                                  : "text-red-600 font-medium"
-                              }
-                            >
-                              {(finalGradesMap[grade.studentId] as number).toFixed(1)}
+                            <span className={finalGrade >= 3.0 ? "text-green-600 font-medium" : "text-red-600 font-medium"}>
+                              {finalGrade.toFixed(1)}
                             </span>
                           </div>
                         ) : (

@@ -10,22 +10,24 @@ export default withAuth(async (req: NextApiRequest, res: NextApiResponse) => {
       supabaseAdmin.from("users").select("id, username, first_name, last_name, role_id, role_name"),
       supabaseAdmin.from("grades").select("id, student_id, subject_id, score, period"),
     ])
-    const subjects = subjectsRes.data ?? []
-    const users = usersRes.data ?? []
-    const grades = gradesRes.data ?? []
+    const subjects = (subjectsRes.data ?? []) as Record<string, unknown>[]
+    const users = (usersRes.data ?? []) as Record<string, unknown>[]
+    const grades = (gradesRes.data ?? []) as Record<string, unknown>[]
 
     // Reportes académicos por materia y periodo
-    const academicReports: any[] = []
-    const subjectsById = Object.fromEntries(subjects.map((s: any) => [s.id, s]))
-    const periods = Array.from(new Set(grades.map((g: any) => g.period)))
+    const academicReports: Array<Record<string, unknown>> = []
+    const subjectsById: Record<number, Record<string, unknown>> = {}
+    subjects.forEach((s) => { const id = Number(s.id ?? 0); if (id) subjectsById[id] = s })
+    const periods = Array.from(new Set(grades.map((g) => g.period)))
     for (const period of periods) {
       for (const subject of subjects) {
-        const gradesForSubjectPeriod = grades.filter((g: any) => g.subject_id === subject.id && g.period === period)
+        const subId = Number(subject.id ?? 0)
+        const gradesForSubjectPeriod = grades.filter((g) => Number(g.subject_id ?? g.subjectId ?? 0) === subId && (g.period ?? null) === period)
         if (gradesForSubjectPeriod.length === 0) continue
-        const average = Math.round((gradesForSubjectPeriod.reduce((sum: number, g: any) => sum + Number(g.score || 0), 0) / gradesForSubjectPeriod.length) * 10) / 10
+        const average = Math.round((gradesForSubjectPeriod.reduce((sum: number, g) => sum + Number(g.score ?? 0), 0) / gradesForSubjectPeriod.length) * 10) / 10
         academicReports.push({
           course: subject.code ?? "",
-          subject: subject.name,
+          subject: subject.name ?? null,
           period,
           average,
           students: gradesForSubjectPeriod.length,
@@ -34,15 +36,15 @@ export default withAuth(async (req: NextApiRequest, res: NextApiResponse) => {
     }
 
     // Desempeño docente por materia
-    const teacherPerformance: any[] = []
+    const teacherPerformance: Array<Record<string, unknown>> = []
     for (const subject of subjects) {
-      const teacher = users.find((u: any) => u.id === subject.teacher_id)
-      const gradesForSubject = grades.filter((g: any) => g.subject_id === subject.id)
+      const teacher = users.find((u) => Number(u.id ?? 0) === Number(subject.teacher_id ?? subject.teacherId ?? 0))
+      const gradesForSubject = grades.filter((g) => Number(g.subject_id ?? g.subjectId ?? 0) === Number(subject.id ?? 0))
       if (gradesForSubject.length === 0 || !teacher) continue
-      const average = Math.round((gradesForSubject.reduce((sum: number, g: any) => sum + Number(g.score || 0), 0) / gradesForSubject.length) * 10) / 10
+      const average = Math.round((gradesForSubject.reduce((sum: number, g) => sum + Number(g.score ?? 0), 0) / gradesForSubject.length) * 10) / 10
       teacherPerformance.push({
-        teacher: teacher.first_name + " " + teacher.last_name,
-        subject: subject.name,
+        teacher: `${String(teacher.first_name ?? '')} ${String(teacher.last_name ?? '')}`.trim(),
+        subject: subject.name ?? null,
         average,
       })
     }
@@ -56,8 +58,9 @@ export default withAuth(async (req: NextApiRequest, res: NextApiResponse) => {
         pdf: '/api/director/report.pdf',
       },
     })
-  } catch (err) {
+  } catch (err: unknown) {
     console.error("director secure-data error:", err)
-    res.status(500).json({ error: "Error interno" })
+    const message = (typeof err === 'object' && err !== null && 'message' in err) ? String((err as { message?: unknown }).message) : String(err ?? 'Error interno')
+    res.status(500).json({ error: message })
   }
 }, ["director"]);

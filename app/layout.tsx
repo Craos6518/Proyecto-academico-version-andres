@@ -24,7 +24,8 @@ export default function RootLayout({
     <html lang="es">
       <head>
         <link rel="icon" href="/placeholder-logo.svg" />
-      </head>
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+      </head> 
       <body className={`font-sans ${GeistSans.variable} ${GeistMono.variable}`}>
         <AuthRehydrate />
         <Suspense fallback={null}>{children}</Suspense>

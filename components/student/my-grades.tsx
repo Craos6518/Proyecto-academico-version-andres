@@ -2,11 +2,38 @@
 
 import { useState, useEffect } from "react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 // Eliminado: lógica de simulación y mock-data
-import { Calculator, Calendar } from "lucide-react"
+import { Calculator } from "lucide-react"
+
+type Assignment = {
+  id?: string | number
+  title?: string
+  name?: string
+  studentGrade?: number | null
+  graded_at?: string | number | null
+  gradedAt?: string | number | null
+  comment?: string | null
+  description?: string | null
+}
+
+type Subject = {
+  subject_id: string | number
+  name?: string
+  grade?: number | null
+  assignments?: Assignment[]
+}
+
+type GradeEntry = {
+  subject_id: string | number
+  assignment_id?: string | number
+  name?: string
+  comment?: string | null
+  score?: number | null
+  grade?: number | null
+  graded_at?: string | number | null
+}
 
 interface MyGradesProps {
   studentId: string | number
@@ -14,10 +41,10 @@ interface MyGradesProps {
 
 
 export function MyGrades({ studentId }: MyGradesProps) {
-  const [subjects, setSubjects] = useState<any[]>([])
+  const [subjects, setSubjects] = useState<Subject[]>([])
   const [selectedSubjectId, setSelectedSubjectId] = useState<string>("")
-  const [grades, setGrades] = useState<any[]>([])
-  const [average, setAverage] = useState<number | null>(null)
+  const [grades, setGrades] = useState<GradeEntry[]>([])
+  // average removed (not used). Keep per-subject averages from `subjects` instead.
   const [loading, setLoading] = useState<boolean>(true)
   const [error, setError] = useState<string>("")
 
@@ -30,18 +57,17 @@ export function MyGrades({ studentId }: MyGradesProps) {
       .then((data) => {
         try {
           console.debug('[MyGrades] fetched data:', data)
-        } catch (e) {
+        } catch {
           // noop
         }
         setSubjects(data.subjects || [])
         setGrades(data.grades || [])
-        setAverage(data.average || null)
         if ((data.subjects || []).length > 0) {
           setSelectedSubjectId(data.subjects[0].subject_id || "")
         }
         setLoading(false)
       })
-      .catch((err) => {
+      .catch(() => {
         setError("Error al cargar datos reales")
         setLoading(false)
       })
@@ -49,19 +75,7 @@ export function MyGrades({ studentId }: MyGradesProps) {
 
   // Eliminado: useEffect para filtrar grades por materia
 
-  // Puedes agregar lógica para mostrar el tipo de evaluación si tienes ese dato en la base
-  const getAssignmentTypeBadge = (type: string) => {
-    switch (type) {
-      case "parcial1":
-        return <Badge variant="default">Parcial 1</Badge>
-      case "parcial2":
-        return <Badge variant="secondary">Parcial 2</Badge>
-      case "final":
-        return <Badge variant="destructive">Final</Badge>
-      default:
-        return <Badge variant="outline">Otro</Badge>
-    }
-  }
+  // Assignment-type badge helper removed (not used)
 
   if (loading) {
     return <div className="text-center py-8 text-muted-foreground">Cargando datos...</div>
@@ -91,11 +105,11 @@ export function MyGrades({ studentId }: MyGradesProps) {
               <SelectValue placeholder="Selecciona una materia" />
             </SelectTrigger>
             <SelectContent>
-              {subjects.map((subject) => (
-                <SelectItem key={subject.subject_id} value={subject.subject_id}>
-                  {subject.name}
-                </SelectItem>
-              ))}
+                {subjects.map((subject) => (
+                  <SelectItem key={String(subject.subject_id)} value={String(subject.subject_id)}>
+                    {subject.name}
+                  </SelectItem>
+                ))}
             </SelectContent>
           </Select>
         </div>
@@ -141,17 +155,19 @@ export function MyGrades({ studentId }: MyGradesProps) {
             <TableBody>
               {(() => {
                 // construir lookup de assignments desde subjects
-                const assignmentLookup: Record<string|number, any> = {}
-                ;(subjects || []).forEach((s: any) => {
-                  ;(s.assignments || []).forEach((a: any) => { if (a?.id) assignmentLookup[String(a.id)] = a })
+                const assignmentLookup: Record<string, Assignment> = {}
+                ;(subjects || []).forEach((s: Subject) => {
+                  const assignments = s.assignments ?? []
+                  assignments.forEach((a) => { if (a?.id) assignmentLookup[String(a.id)] = a })
                 })
 
                 const rawSelected = (grades || []).filter((g) => String(g.subject_id) === String(selectedSubjectId))
                 if (rawSelected.length === 0) {
                   const subj = (subjects || []).find((s) => String(s.subject_id) === String(selectedSubjectId))
-                  const derived = (subj?.assignments || []).map((a: any) => ({
+                  const assignments = subj?.assignments ?? []
+                  const derived = assignments.map((a) => ({
                     id: a.id,
-                    name: a.title || a.name || `Evaluación ${a.id}`,
+                    name: a.title ?? a.name ?? `Evaluación ${a.id}`,
                     score: a.studentGrade ?? null,
                     graded_at: a.graded_at ?? a.gradedAt ?? null,
                     comment: a.comment ?? a.description ?? null,
@@ -165,7 +181,7 @@ export function MyGrades({ studentId }: MyGradesProps) {
                       </TableRow>
                     )
                   }
-                  return derived.map((grade: any, idx: number) => (
+                  return derived.map((grade, idx: number) => (
                     <TableRow key={`d-${idx}`}>
                       <TableCell className="font-medium">
                         <div>{grade.name}</div>
@@ -176,13 +192,13 @@ export function MyGrades({ studentId }: MyGradesProps) {
                           {grade.score ?? "-"}
                         </span>
                       </TableCell>
-                      <TableCell>{grade.graded_at ? new Date(grade.graded_at).toLocaleDateString("es-ES") : "-"}</TableCell>
+                      <TableCell>{grade.graded_at ? new Date(String(grade.graded_at)).toLocaleDateString("es-ES") : "-"}</TableCell>
                     </TableRow>
                   ))
                 }
 
                 // enriquecer los grades con metadata de assignmentLookup cuando falte
-                const enriched = rawSelected.map((g: any) => {
+                const enriched = rawSelected.map((g: GradeEntry) => {
                   const a = assignmentLookup[String(g.assignment_id)]
                   return {
                     ...g,
@@ -192,7 +208,7 @@ export function MyGrades({ studentId }: MyGradesProps) {
                   }
                 })
 
-                return enriched.map((g: any, idx: number) => (
+                return enriched.map((g, idx: number) => (
                   <TableRow key={`g-${idx}`}>
                     <TableCell className="font-medium">
                       <div>{g.name}</div>
@@ -203,7 +219,7 @@ export function MyGrades({ studentId }: MyGradesProps) {
                         {typeof g.score === 'number' ? g.score.toFixed(1) : (g.score ?? "-")}
                       </span>
                     </TableCell>
-                    <TableCell>{g.graded_at ? new Date(g.graded_at).toLocaleDateString("es-ES") : "-"}</TableCell>
+                    <TableCell>{g.graded_at ? new Date(String(g.graded_at)).toLocaleDateString("es-ES") : "-"}</TableCell>
                   </TableRow>
                 ))
               })()}

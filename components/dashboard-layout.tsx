@@ -27,12 +27,13 @@ export function DashboardLayout({ children, user, title }: DashboardLayoutProps)
   const router = useRouter()
   const [showPasswordDialog, setShowPasswordDialog] = useState(false)
 
-  // normalizar el nombre a mostrar una sola vez
-  const first = (user as any).firstName ?? (user as any).first_name
-  const last = (user as any).lastName ?? (user as any).last_name
-  const displayName = first || last
+  // normalizar el nombre a mostrar una sola vez (accedemos de forma segura a propiedades dinámicas)
+  const u = user as unknown as Record<string, unknown>
+  const first = (u['firstName'] ?? u['first_name']) as string | undefined
+  const last = (u['lastName'] ?? u['last_name']) as string | undefined
+  const displayName = (first || last)
     ? `${first ?? ""} ${last ?? ""}`.trim()
-    : (user as any).displayName ?? (user as any).username ?? ((user as any).email ? String((user as any).email).split("@")[0] : "Usuario")
+    : ((u['displayName'] ?? u['username']) as string | undefined) ?? (u['email'] ? String(u['email']).split("@")[0] : "Usuario")
 
   const handleLogout = () => {
     authService.logout()

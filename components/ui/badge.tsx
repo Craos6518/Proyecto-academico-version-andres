@@ -32,10 +32,10 @@ const Badge = React.forwardRef<
   HTMLSpanElement | React.ElementRef<typeof Slot>,
   BadgeProps
 >(function Badge({ className, variant, asChild = false, ...props }, ref) {
-  const Comp: any = asChild ? Slot : 'span'
+  const Comp: React.ElementType = asChild ? Slot : 'span'
 
   return (
-    <Comp ref={ref as any} data-slot="badge" className={cn(badgeVariants({ variant }), className)} {...props} />
+    <Comp ref={ref as unknown as React.Ref<HTMLSpanElement | React.ElementRef<typeof Slot>>} data-slot="badge" className={cn(badgeVariants({ variant }), className)} {...props} />
   )
 })
 Badge.displayName = 'Badge'

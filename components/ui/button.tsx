@@ -44,11 +44,26 @@ const Button = React.forwardRef<
   HTMLButtonElement | React.ElementRef<typeof Slot>,
   ButtonProps
 >(function Button({ className, variant, size, asChild = false, ...props }, ref) {
-  const Comp: any = asChild ? Slot : 'button'
+  // Render branches handled directly; no local `Comp` variable to avoid unused-var.
+
+  // Safe cast to forwarded ref without using `any` (preserve polymorphic Slot support)
+  const _ref = ref as unknown as React.ForwardedRef<HTMLButtonElement | React.ElementRef<typeof Slot>>
+
+  // Render separately to keep correct ref typing for <button> vs <Slot>
+  if (asChild) {
+    return (
+      <Slot
+        ref={_ref as React.ForwardedRef<React.ElementRef<typeof Slot>>}
+        data-slot="button"
+        className={cn(buttonVariants({ variant, size, className }))}
+        {...props}
+      />
+    )
+  }
 
   return (
-    <Comp
-      ref={ref as any}
+    <button
+      ref={_ref as React.ForwardedRef<HTMLButtonElement>}
       data-slot="button"
       className={cn(buttonVariants({ variant, size, className }))}
       {...props}

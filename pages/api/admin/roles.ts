@@ -9,8 +9,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (error) throw error
 
     return res.status(200).json(data ?? [])
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("admin/roles error:", err)
-    return res.status(500).json({ error: err.message || "Error interno" })
+    const message = err instanceof Error ? err.message : String(err)
+    return res.status(500).json({ error: message || "Error interno" })
   }
 }

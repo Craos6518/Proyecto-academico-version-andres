@@ -13,22 +13,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       supabaseAdmin.from("grades").select("*").eq("student_id", studentId),
     ])
 
-    const enrollments = enrollRes.data ?? []
-    const grades = gradesRes.data ?? []
+  const enrollments = (enrollRes.data ?? []) as Record<string, unknown>[]
+  const grades = (gradesRes.data ?? []) as Record<string, unknown>[]
 
     let average = 0
     let highest = 0
     let lowest = 0
 
-    if ((grades as any[]).length > 0) {
-      const scores = (grades as any[]).map((g) => Number(g.score))
+    if (grades.length > 0) {
+      const scores = grades.map((g) => Number(g.score ?? g.grade ?? 0))
       average = Math.round((scores.reduce((s, v) => s + v, 0) / scores.length) * 10) / 10
       highest = Math.max(...scores)
       lowest = Math.min(...scores)
     }
 
     return res.status(200).json({
-      enrolledSubjects: (enrollments as any[]).length,
+  enrolledSubjects: enrollments.length,
       averageGrade: average,
       highestGrade: highest,
       lowestGrade: lowest,
