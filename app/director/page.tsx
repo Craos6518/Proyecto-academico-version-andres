@@ -4,6 +4,7 @@ export const dynamic = "force-dynamic"
 import { headers, cookies } from "next/headers"
 import { verifyJWT, normalizeRole } from "@/lib/auth"
 import { DashboardLayout } from "@/components/dashboard-layout"
+import type { User } from "@/lib/types"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import AcademicReports from "@/components/director/academic-reports"
@@ -35,7 +36,7 @@ export default async function DirectorDashboard() {
     // Añadir logging mínimo para depuración en producción (no imprimir token completo)
     try {
       console.log(`DirectorDashboard: token type=${typeof token} length=${String(token).length}`)
-    } catch (e) {
+    } catch {
       // noop
     }
 
@@ -66,9 +67,10 @@ export default async function DirectorDashboard() {
         const role = normalizeRole(rawRole)
         if (role !== "director") return redirect("/")
 
-        const user = {
-          id: me.id,
-          email: me.email,
+        const user: User = {
+          id: Number(me.id),
+          username: String(me.username ?? me.email ?? ""),
+          email: String(me.email ?? ""),
           roleName: rawRole,
         }
 
@@ -84,7 +86,7 @@ export default async function DirectorDashboard() {
         }
 
         return (
-          <DashboardLayout user={user as any} title="Panel del Director">
+          <DashboardLayout user={user} title="Panel del Director">
             <div className="space-y-6">
               <div>
                 <h2 className="text-2xl font-bold mb-2">Resumen Institucional</h2>
@@ -211,10 +213,11 @@ export default async function DirectorDashboard() {
       // mantener stats por defecto
     }
 
-    const user = { id: payload.id, username: payload.username, roleName: payload.role }
+  const pl = payload as Record<string, unknown>
+  const user: User = { id: Number(pl["id"] ?? 0), username: String(pl["username"] ?? pl["email"] ?? ""), email: String(pl["email"] ?? ""), roleName: String(pl["role"] ?? "") }
 
     return (
-      <DashboardLayout user={user as any} title="Panel del Director">
+      <DashboardLayout user={user} title="Panel del Director">
         <div className="space-y-6">
           <div>
             <h2 className="text-2xl font-bold mb-2">Resumen Institucional</h2>

@@ -8,8 +8,8 @@ export default withAuth(async (req: NextApiRequest, res: NextApiResponse) => {
   if (req.method !== "GET") return res.status(405).json({ error: "Método no permitido" })
 
   // Obtener el id del usuario autenticado
-  const user = (req as any).user
-  const studentId = user?.id || user?.user_id || user?.userId
+  const user = (req as unknown as { user?: Record<string, unknown> }).user
+  const studentId = (user?.id ?? user?.user_id ?? user?.userId) as number | string | undefined
   if (!studentId) return res.status(400).json({ error: "No se pudo identificar al estudiante" })
 
   try {
@@ -22,77 +22,81 @@ export default withAuth(async (req: NextApiRequest, res: NextApiResponse) => {
     ])
 
     // Intentar obtener mensajes, pero manejar si la tabla no existe
-    let messages: any[] = []
+    let messages: Record<string, unknown>[] = []
     try {
       const messagesRes = await supabaseAdmin.from("messages").select("from, subject, message").eq("student_id", studentId)
-      if (!messagesRes.error && messagesRes.data) messages = messagesRes.data
+      if (!messagesRes.error && Array.isArray(messagesRes.data)) messages = messagesRes.data as Record<string, unknown>[]
     } catch (e) {
       // tabla messages posiblemente no exista; continuar sin bloquear
       console.warn("messages table missing or query failed, continuing without messages", e)
       messages = []
     }
 
-    const subjectsRaw = (enrollRes.data ?? [])
-    const gradesRaw = (gradesRes.data ?? [])
+  const subjectsRaw = (enrollRes.data ?? []) as Record<string, unknown>[]
+  const gradesRaw = (gradesRes.data ?? []) as Record<string, unknown>[]
 
     // Mapear calificaciones por subject_id para acceso rápido
     const gradesMap: Record<number, number[]> = {}
     const assignmentGradeMap: Record<number, number> = {}
-    ;(gradesRaw || []).forEach((g: any) => {
-      const sid = Number(g.subject_id)
+    ;(gradesRaw || []).forEach((g: Record<string, unknown>) => {
+      const sid = Number(g.subject_id ?? g.subjectId ?? 0)
       if (!gradesMap[sid]) gradesMap[sid] = []
-      gradesMap[sid].push(Number(g.score))
-      if (g.assignment_id) assignmentGradeMap[g.assignment_id] = Number(g.score)
+      gradesMap[sid].push(Number(g.score ?? g.grade ?? 0))
+      const aid = g.assignment_id ?? g.assignmentId
+      if (aid !== undefined && aid !== null) assignmentGradeMap[Number(aid as unknown as number)] = Number(g.score ?? g.grade ?? 0)
     })
 
     // Para cada materia inscrita, incluir la nota si existe (promedio si hay múltiples)
     // collect subjectIds and teacherIds to fetch assignments and teachers
-    const subjectIds: number[] = (subjectsRaw || []).map((e: any) => Number(e.subject_id))
-    const teacherIds = Array.from(new Set((subjectsRaw || []).map((e: any) => Number(e.subjects?.teacher_id)).filter(Boolean)))
+  const subjectIds: number[] = (subjectsRaw || []).map((e: Record<string, unknown>) => Number(e.subject_id ?? e.subjectId ?? 0))
+  const teacherIds = Array.from(new Set((subjectsRaw || []).map((e: Record<string, unknown>) => Number(((e.subjects as Record<string, unknown> | undefined)?.teacher_id ?? (e.subjects as Record<string, unknown> | undefined)?.teacherId) ?? 0)).filter(Boolean)))
 
     // fetch teacher data
-    const teachersMap: Record<number, any> = {}
+    const teachersMap: Record<number, Record<string, unknown>> = {}
     if (teacherIds.length > 0) {
       const { data: teachersData } = await supabaseAdmin.from("users").select("id, first_name, last_name").in("id", teacherIds)
-      ;(teachersData || []).forEach((t: any) => (teachersMap[t.id] = t))
+      ;(teachersData || []).forEach((t: Record<string, unknown>) => {
+        const id = Number(t.id ?? 0)
+        if (id) teachersMap[id] = t
+      })
     }
 
     // fetch assignments for these subjects — usar select('*') para evitar errores por columnas faltantes
-    let assignmentsData: any[] = []
+    let assignmentsData: Record<string, unknown>[] = []
     if (subjectIds.length > 0) {
       const { data: aData } = await supabaseAdmin.from("assignments").select("*").in("subject_id", subjectIds)
-      assignmentsData = aData || []
+      assignmentsData = (aData || []) as Record<string, unknown>[]
     }
 
-  const subjects = (subjectsRaw || []).map((e: any) => {
-      const sid = Number(e.subject_id)
-      const subj = e.subjects || {}
+  const subjects = (subjectsRaw || []).map((e: Record<string, unknown>) => {
+      const sid = Number(e.subject_id ?? e.subjectId ?? 0)
+      const subj = (e.subjects as Record<string, unknown> | undefined) ?? {}
       const scores = gradesMap[sid] || []
       const grade = scores.length > 0 ? Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 100) / 100 : null
-      const teacher = subj.teacher_id ? teachersMap[subj.teacher_id] : null
-      const subjectAssignments = (assignmentsData || []).filter((a: any) => Number(a.subject_id) === sid).map((a: any) => ({
+      const teacher = subj.teacher_id ? teachersMap[Number(subj.teacher_id)] : (subj.teacherId ? teachersMap[Number(subj.teacherId)] : null)
+      const subjectAssignments = (assignmentsData || []).filter((a: Record<string, unknown>) => Number(a.subject_id ?? a.subjectId ?? 0) === sid).map((a: Record<string, unknown>) => ({
         id: a.id,
-        title: a.title ?? a.name ?? null,
+        title: (a.title ?? a.name) ?? null,
         description: a.description ?? null,
-        due_date: a.due_date ?? null,
-        type: a.assignment_type ?? null,
-        max_score: a.max_score ?? null,
+        due_date: a.due_date ?? a.dueDate ?? null,
+        type: a.assignment_type ?? a.assignmentType ?? null,
+        max_score: a.max_score ?? a.maxScore ?? null,
         weight: a.weight ?? null,
-        studentGrade: assignmentGradeMap[a.id] ?? null,
+        studentGrade: assignmentGradeMap[Number(a.id ?? 0)] ?? null,
       }))
       return {
-        id: subj.id || sid,
-        name: subj.name || "",
+        id: subj.id ?? sid,
+        name: subj.name ?? "",
         subject_id: sid,
-        description: subj.description || "",
-        teacherName: teacher ? `${teacher.first_name || ''} ${teacher.last_name || ''}`.trim() : null,
+        description: subj.description ?? "",
+        teacherName: teacher ? `${teacher.first_name ?? ''} ${teacher.last_name ?? ''}`.trim() : null,
         grade,
         assignments: subjectAssignments,
       }
     })
 
     // Calcular promedio global considerando solo materias con nota
-    const scored = subjects.filter((s: any) => s.grade !== null).map((s: any) => s.grade as number)
+  const scored = subjects.filter((s: Record<string, unknown>) => (s.grade ?? null) !== null).map((s: Record<string, unknown>) => (s.grade ?? 0) as number)
     const average = scored.length > 0 ? Math.round((scored.reduce((a: number, b: number) => a + b, 0) / scored.length) * 100) / 100 : 0
 
     // Enlaces de exportación (pueden ser rutas reales si existen)
@@ -103,13 +107,16 @@ export default withAuth(async (req: NextApiRequest, res: NextApiResponse) => {
 
   // Normalizar gradesRaw para exponer un array top-level que los componentes cliente esperan
     // build an assignment lookup to attach names/descriptions to grades
-    const assignmentById: Record<string|number, any> = {}
-    ;(assignmentsData || []).forEach((a: any) => { assignmentById[a.id] = a })
+    const assignmentById: Record<string, Record<string, unknown>> = {}
+    ;(assignmentsData || []).forEach((a: Record<string, unknown>) => {
+      const key = String(a.id ?? '')
+      assignmentById[key] = a
+    })
 
-  const grades = (gradesRaw || []).map((g: any) => {
+  const grades = (gradesRaw || []).map((g: Record<string, unknown>) => {
       const aid = g.assignment_id ?? g.assignmentId ?? null
-      const assignmentRel = g.assignments ?? (aid ? assignmentById[aid] : null)
-      const assignment = assignmentRel || (aid ? assignmentById[aid] : null)
+      const assignmentRel = (g.assignments as Record<string, unknown> | undefined) ?? (aid ? assignmentById[aid as unknown as string | number] : null)
+      const assignment = assignmentRel || (aid ? assignmentById[aid as unknown as string | number] : null)
       return {
         id: g.id,
         assignment_id: aid,

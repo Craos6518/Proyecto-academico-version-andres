@@ -25,11 +25,6 @@ function AccordionItem({
   )
 }
 
-function AccordionTrigger({
-  className,
-  children,
-  ...props
-}: React.ComponentProps<typeof AccordionPrimitive.Trigger>) {
 const AccordionTrigger = /*#__PURE__*/ React.forwardRef<
   React.ElementRef<typeof AccordionPrimitive.Trigger>,
   React.ComponentProps<typeof AccordionPrimitive.Trigger>
@@ -52,7 +47,6 @@ const AccordionTrigger = /*#__PURE__*/ React.forwardRef<
   )
 })
 AccordionTrigger.displayName = 'AccordionTrigger'
-}
 
 function AccordionContent({
   className,

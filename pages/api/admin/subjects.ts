@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next"
 import { supabaseAdmin } from "../../../lib/supabase-client"
+import type { User } from "../../../lib/types"
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
@@ -7,29 +8,31 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const { data, error } = await supabaseAdmin.from("subjects").select("*")
       if (error) throw error
       // fetch users to map teacher names when missing
-      const { data: usersData } = await supabaseAdmin.from("users").select("id, first_name, last_name, firstName, lastName")
-      const usersMap: Record<number, any> = {}
-      ;(usersData || []).forEach((u: any) => (usersMap[u.id] = u))
+  const { data: usersData } = await supabaseAdmin.from("users").select("id, first_name, last_name, firstName, lastName")
+  const usersMap: Record<number, User | undefined> = {}
+  ;(usersData || []).forEach((u) => (usersMap[(u as unknown as User).id] = u as unknown as User))
 
-      const mapped = (data || []).map((row: any) => {
-        const teacherId = row.teacher_id ?? row.teacherId ?? null
-        const teacherFromRow = row.teacher_name ?? row.teacherName
+      const mapped = (data || []).map((row) => {
+        const r = row as unknown as Record<string, unknown>
+        const teacherId = (r["teacher_id"] ?? r["teacherId"]) as number | null | undefined
+        const teacherFromRow = (r["teacher_name"] ?? r["teacherName"]) as string | undefined
         const teacherUser = teacherId ? usersMap[teacherId] : null
         let teacherName = ""
         if (teacherFromRow) {
           teacherName = teacherFromRow
         } else if (teacherUser) {
-          const first = (teacherUser.first_name ?? teacherUser.firstName) || ""
-          const last = (teacherUser.last_name ?? teacherUser.lastName) || ""
+          const tu = teacherUser as unknown as Record<string, unknown>
+          const first = (tu["first_name"] ?? (teacherUser as User).firstName ?? "") as string
+          const last = (tu["last_name"] ?? (teacherUser as User).lastName ?? "") as string
           teacherName = `${first} ${last}`.trim()
         }
         return {
-          id: row.id,
-          name: row.name,
-          code: row.code,
-          description: row.description,
-          credits: row.credits,
-          teacherId,
+          id: r["id"] as number,
+          name: (r["name"] ?? "") as string,
+          code: (r["code"] ?? "") as string,
+          description: (r["description"] ?? "") as string,
+          credits: (r["credits"] ?? null) as number | null,
+          teacherId: (teacherId ?? null) as number | null,
           teacherName,
         }
       })
@@ -37,7 +40,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (req.method === "POST") {
-      const payload = req.body
+  const payload = req.body as Record<string, unknown>
       const dbPayload = {
         // For schemas that don't have auto-increment on id, avoid null id by generating one
         // (best-effort: compute max(id)+1). This keeps compatibility with the simple SQL seeds
@@ -56,12 +59,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (!dbPayload.id) {
         try {
           const { data: maxRow, error: maxErr } = await supabaseAdmin.from("subjects").select("id").order("id", { ascending: false }).limit(1).maybeSingle()
-          if (!maxErr && maxRow && (maxRow as any).id !== undefined && (maxRow as any).id !== null) {
-            dbPayload.id = Number((maxRow as any).id) + 1
+          if (!maxErr && maxRow && (maxRow as unknown as Record<string, unknown>)["id"] !== undefined && (maxRow as unknown as Record<string, unknown>)["id"] !== null) {
+            dbPayload.id = Number((maxRow as unknown as Record<string, unknown>)["id"]) + 1
           } else {
             dbPayload.id = 1
           }
-        } catch (e) {
+        } catch {
           // fallback
           dbPayload.id = 1
         }
@@ -82,15 +85,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (req.method === "PUT") {
-      const { id, ...updates } = req.body
+  const { id, ...updates } = req.body as Record<string, unknown>
       if (!id) return res.status(400).json({ error: "Missing id" })
-      const dbUpdates: any = {}
-      if (updates.name !== undefined) dbUpdates.name = updates.name
-      if (updates.code !== undefined) dbUpdates.code = updates.code
-      if (updates.description !== undefined) dbUpdates.description = updates.description
-      if (updates.credits !== undefined) dbUpdates.credits = updates.credits
-      if (updates.teacherId !== undefined) dbUpdates.teacher_id = updates.teacherId
-      if (updates.teacherName !== undefined) dbUpdates.teacher_name = updates.teacherName
+  const dbUpdates: Record<string, unknown> = {}
+  const updatesRec = updates as Record<string, unknown>
+  if (updatesRec["name"] !== undefined) dbUpdates.name = updatesRec["name"]
+  if (updatesRec["code"] !== undefined) dbUpdates.code = updatesRec["code"]
+  if (updatesRec["description"] !== undefined) dbUpdates.description = updatesRec["description"]
+  if (updatesRec["credits"] !== undefined) dbUpdates.credits = updatesRec["credits"]
+  if (updatesRec["teacherId"] !== undefined) dbUpdates.teacher_id = updatesRec["teacherId"]
+  if (updatesRec["teacherName"] !== undefined) dbUpdates.teacher_name = updatesRec["teacherName"]
 
       const { data, error } = await supabaseAdmin.from("subjects").update(dbUpdates).eq("id", id).select().limit(1).single()
       if (error) throw error
@@ -115,9 +119,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(204).end()
     }
 
-    return res.status(405).json({ error: "Method not allowed" })
-  } catch (err: any) {
+      return res.status(405).json({ error: "Method not allowed" })
+  } catch (err: unknown) {
     console.error("admin/subjects error:", err)
-    return res.status(500).json({ error: err.message || "Error interno" })
+    const message = err instanceof Error ? err.message : String(err)
+    return res.status(500).json({ error: message || "Error interno" })
   }
 }

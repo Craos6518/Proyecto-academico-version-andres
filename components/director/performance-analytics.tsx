@@ -47,61 +47,63 @@ export function PerformanceAnalytics() {
         const rawGrades = await gradesRes.json()
         const assignments = await assignmentsRes.json()
 
-        // Normalizar campos de grades: asegurar IDs numéricos y score numérico
-        const grades = (rawGrades || [])
-          .map((g: any) => ({
-            ...g,
-            assignmentId: g.assignmentId ?? g.assignment_id ?? null,
-            studentId: g.studentId ?? g.student_id ?? null,
-            score: g.score ?? 0,
-          }))
-          .map((g: any) => ({
-            ...g,
-            // Convertir posibles strings a numbers (defensivo)
-            assignmentId: g.assignmentId != null ? (typeof g.assignmentId === 'string' ? Number(g.assignmentId) : g.assignmentId) : null,
-            studentId: g.studentId != null ? (typeof g.studentId === 'string' ? Number(g.studentId) : g.studentId) : null,
-            score: typeof g.score === 'string' ? parseFloat(g.score) : Number(g.score),
-          }))
+        // Normalize incoming data defensively into typed-friendly shapes
+        const gradeRows = (rawGrades || []) as Array<Record<string, unknown>>
+        const assignmentRows = (assignments || []) as Array<Record<string, unknown>>
 
+        const grades = gradeRows.map((g) => {
+          const assignmentIdRaw = g["assignmentId"] ?? g["assignment_id"] ?? null
+          const studentIdRaw = g["studentId"] ?? g["student_id"] ?? null
+          const scoreRaw = g["score"] ?? 0
 
-      const excellent = grades.filter((g: any) => g.score >= 4.5).length
-      const good = grades.filter((g: any) => g.score >= 4.0 && g.score < 4.5).length
-      const satisfactory = grades.filter((g: any) => g.score >= 3.0 && g.score < 4.0).length
-      const failing = grades.filter((g: any) => g.score < 3.0).length
+          const assignmentId = assignmentIdRaw != null ? (typeof assignmentIdRaw === "string" ? Number(assignmentIdRaw) : Number(assignmentIdRaw)) : null
+          const studentId = studentIdRaw != null ? (typeof studentIdRaw === "string" ? Number(studentIdRaw) : Number(studentIdRaw)) : null
+          const score = typeof scoreRaw === "string" ? parseFloat(String(scoreRaw)) : Number(scoreRaw)
 
-      // Asegurar que los ids de assignments sean comparables (números)
-      const normalizedAssignments = (assignments || []).map((a: any) => ({ ...a, id: typeof a.id === 'string' ? Number(a.id) : a.id }))
+          return { assignmentId, studentId, score }
+        })
 
-      const parcial1Grades = grades.filter((g: any) => {
-        if (g.assignmentId == null) return false
-        const assignment = normalizedAssignments.find((a: any) => a.id === g.assignmentId)
-        return assignment?.assignmentType === "parcial1"
-      })
-      const parcial2Grades = grades.filter((g: any) => {
-        if (g.assignmentId == null) return false
-        const assignment = normalizedAssignments.find((a: any) => a.id === g.assignmentId)
-        return assignment?.assignmentType === "parcial2"
-      })
-      const finalGrades = grades.filter((g: any) => {
-        if (g.assignmentId == null) return false
-        const assignment = normalizedAssignments.find((a: any) => a.id === g.assignmentId)
-        return assignment?.assignmentType === "final"
-      })
+        // Asegurar que los ids de assignments sean números y extraer assignmentType
+        const normalizedAssignments = assignmentRows.map((a) => ({
+          id: Number(a["id"] ?? a["ID"] ?? 0),
+          assignmentType: String(a["assignmentType"] ?? a["assignment_type"] ?? ""),
+        }))
 
-      const avgParcial1 =
-        parcial1Grades.length > 0
-          ? Math.round((parcial1Grades.reduce((sum: number, g: any) => sum + g.score, 0) / parcial1Grades.length) * 10) / 10
-          : 0
+        const excellent = grades.filter((g) => g.score >= 4.5).length
+        const good = grades.filter((g) => g.score >= 4.0 && g.score < 4.5).length
+        const satisfactory = grades.filter((g) => g.score >= 3.0 && g.score < 4.0).length
+        const failing = grades.filter((g) => g.score < 3.0).length
 
-      const avgParcial2 =
-        parcial2Grades.length > 0
-          ? Math.round((parcial2Grades.reduce((sum: number, g: any) => sum + g.score, 0) / parcial2Grades.length) * 10) / 10
-          : 0
+        const parcial1Grades = grades.filter((g) => {
+          if (g.assignmentId == null) return false
+          const assignment = normalizedAssignments.find((a) => a.id === g.assignmentId)
+          return assignment?.assignmentType === "parcial1"
+        })
+        const parcial2Grades = grades.filter((g) => {
+          if (g.assignmentId == null) return false
+          const assignment = normalizedAssignments.find((a) => a.id === g.assignmentId)
+          return assignment?.assignmentType === "parcial2"
+        })
+        const finalGrades = grades.filter((g) => {
+          if (g.assignmentId == null) return false
+          const assignment = normalizedAssignments.find((a) => a.id === g.assignmentId)
+          return assignment?.assignmentType === "final"
+        })
 
-      const avgFinal =
-        finalGrades.length > 0
-          ? Math.round((finalGrades.reduce((sum: number, g: any) => sum + g.score, 0) / finalGrades.length) * 10) / 10
-          : 0
+        const avgParcial1 =
+          parcial1Grades.length > 0
+            ? Math.round((parcial1Grades.reduce((sum: number, g) => sum + g.score, 0) / parcial1Grades.length) * 10) / 10
+            : 0
+
+        const avgParcial2 =
+          parcial2Grades.length > 0
+            ? Math.round((parcial2Grades.reduce((sum: number, g) => sum + g.score, 0) / parcial2Grades.length) * 10) / 10
+            : 0
+
+        const avgFinal =
+          finalGrades.length > 0
+            ? Math.round((finalGrades.reduce((sum: number, g) => sum + g.score, 0) / finalGrades.length) * 10) / 10
+            : 0
 
       if (mounted)
         setAnalytics({

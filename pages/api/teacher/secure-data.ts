@@ -11,36 +11,48 @@ export default withAuth(async (req: NextApiRequest, res: NextApiResponse) => {
     // Obtener materias del docente
     const { data: subjects, error: subjectsError } = await supabaseAdmin.from("subjects").select("id, name").eq("teacher_id", teacherId)
     if (subjectsError) throw subjectsError
-    const subjectIds = (subjects || []).map((s: any) => s.id)
+  const subjectIds = (subjects || []).map((s: Record<string, unknown>) => Number(s.id ?? s.id ?? 0))
 
     // Obtener notas de esas materias
     const { data: gradesData, error: gradesError } = await supabaseAdmin.from("grades").select("id, student_id, subject_id, score, comments, graded_by, graded_at")
     if (gradesError) throw gradesError
-    const grades = (gradesData || []).filter((g: any) => subjectIds.includes(g.subject_id))
+  const grades = (gradesData || []).filter((g: Record<string, unknown>) => subjectIds.includes(Number(g.subject_id ?? g.subjectId ?? 0)))
 
     // Obtener estudiantes y materias para mostrar nombres
     const { data: usersData } = await supabaseAdmin.from("users").select("id, first_name, last_name")
-    const usersMap: Record<number, any> = {}
-    ;(usersData || []).forEach((u: any) => (usersMap[u.id] = u))
-    const subjectsMap: Record<number, any> = {}
-    ;(subjects || []).forEach((s: any) => (subjectsMap[s.id] = s))
+    const usersMap: Record<number, Record<string, unknown>> = {}
+    ;(usersData || []).forEach((u: Record<string, unknown>) => {
+      const id = Number(u.id ?? 0)
+      if (id) usersMap[id] = u
+    })
+    const subjectsMap: Record<number, Record<string, unknown>> = {}
+    ;(subjects || []).forEach((s: Record<string, unknown>) => {
+      const id = Number(s.id ?? 0)
+      if (id) subjectsMap[id] = s
+    })
 
     // Formatear grades para mostrar nombres
-    const gradesFormatted = grades.map((g: any) => ({
-      student: usersMap[g.student_id] ? `${usersMap[g.student_id].first_name} ${usersMap[g.student_id].last_name}` : g.student_id,
-      subject: subjectsMap[g.subject_id] ? subjectsMap[g.subject_id].name : g.subject_id,
-      grade: g.score,
-      lastModified: g.graded_at,
-      comments: g.comments,
-    }))
+    const gradesFormatted = (grades || []).map((g: Record<string, unknown>) => {
+      const studentId = Number(g.student_id ?? g.studentId ?? 0)
+      const subjId = Number(g.subject_id ?? g.subjectId ?? 0)
+      const user = usersMap[studentId]
+      const subject = subjectsMap[subjId]
+      return {
+        student: user ? `${String(user.first_name ?? '')} ${String(user.last_name ?? '')}`.trim() : (g.student_id ?? g.studentId),
+        subject: subject ? String(subject.name ?? '') : (g.subject_id ?? g.subjectId),
+        grade: Number(g.score ?? g.grade ?? 0),
+        lastModified: g.graded_at ?? g.gradedAt ?? null,
+        comments: g.comments ?? null,
+      }
+    })
 
     // Historial de cambios: buscar en tabla "grade_history" si existe
-    let history: any[] = []
+    let history: Record<string, unknown>[] = []
     try {
       const { data: historyData, error: historyError } = await supabaseAdmin.from("grade_history").select("student_id, action, old_grade, new_grade, date")
-      if (!historyError && historyData) {
-        history = historyData.map((h: any) => ({
-          student: usersMap[h.student_id] ? `${usersMap[h.student_id].first_name} ${usersMap[h.student_id].last_name}` : h.student_id,
+      if (!historyError && Array.isArray(historyData)) {
+        history = historyData.map((h: Record<string, unknown>) => ({
+          student: usersMap[Number(h.student_id ?? 0)] ? `${String(usersMap[Number(h.student_id ?? 0)].first_name ?? '')} ${String(usersMap[Number(h.student_id ?? 0)].last_name ?? '')}`.trim() : (h.student_id ?? null),
           action: h.action,
           oldGrade: h.old_grade,
           newGrade: h.new_grade,
@@ -57,8 +69,9 @@ export default withAuth(async (req: NextApiRequest, res: NextApiResponse) => {
       history,
       average,
     })
-  } catch (err) {
+  } catch (err: unknown) {
     console.error("teacher secure-data error:", err)
-    res.status(500).json({ error: "Error interno" })
+    const message = (typeof err === 'object' && err !== null && 'message' in err) ? String((err as { message?: unknown }).message) : String(err ?? 'Error interno')
+    res.status(500).json({ error: message })
   }
 }, ["teacher"]);

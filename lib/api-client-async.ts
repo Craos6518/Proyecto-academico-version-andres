@@ -1,6 +1,7 @@
 "use server"
 
 import { supabaseApiClient } from "./supabase-api-client"
+import type { User, Subject, Assignment, Grade, Enrollment } from "./types"
 
 // Users
 export async function getUsers() {
@@ -11,11 +12,11 @@ export async function getUserById(id: number) {
   return await supabaseApiClient.getUserById(id)
 }
 
-export async function createUser(u: any) {
+export async function createUser(u: Omit<User, "id">) {
   return await supabaseApiClient.createUser(u)
 }
 
-export async function updateUser(id: number, updates: any) {
+export async function updateUser(id: number, updates: Partial<User>) {
   return await supabaseApiClient.updateUser(id, updates)
 }
 
@@ -36,11 +37,11 @@ export async function getSubjectsByTeacher(teacherId: number) {
   return await supabaseApiClient.getSubjectsByTeacher(teacherId)
 }
 
-export async function createSubject(s: any) {
+export async function createSubject(s: Omit<Subject, "id">) {
   return await supabaseApiClient.createSubject(s)
 }
 
-export async function updateSubject(id: number, updates: any) {
+export async function updateSubject(id: number, updates: Partial<Subject>) {
   return await supabaseApiClient.updateSubject(id, updates)
 }
 
@@ -61,11 +62,11 @@ export async function getEnrollmentsBySubject(subjectId: number) {
   return await supabaseApiClient.getEnrollmentsBySubject(subjectId)
 }
 
-export async function createEnrollment(e: any) {
+export async function createEnrollment(e: Omit<Enrollment, "id">) {
   return await supabaseApiClient.createEnrollment(e)
 }
 
-export async function updateEnrollment(id: number, updates: any) {
+export async function updateEnrollment(id: number, updates: Partial<Enrollment>) {
   return await supabaseApiClient.updateEnrollment(id, updates)
 }
 
@@ -82,11 +83,11 @@ export async function getAssignmentsBySubject(subjectId: number) {
   return await supabaseApiClient.getAssignmentsBySubject(subjectId)
 }
 
-export async function createAssignment(a: any) {
+export async function createAssignment(a: Omit<Assignment, "id">) {
   return await supabaseApiClient.createAssignment(a)
 }
 
-export async function updateAssignment(id: number, updates: any) {
+export async function updateAssignment(id: number, updates: Partial<Assignment>) {
   return await supabaseApiClient.updateAssignment(id, updates)
 }
 
@@ -111,11 +112,11 @@ export async function getGradesByStudentAndSubject(studentId: number, subjectId:
   return await supabaseApiClient.getGradesByStudentAndSubject(studentId, subjectId)
 }
 
-export async function createGrade(g: any) {
+export async function createGrade(g: Omit<Grade, "id">) {
   return await supabaseApiClient.createGrade(g)
 }
 
-export async function updateGrade(id: number, updates: any) {
+export async function updateGrade(id: number, updates: Partial<Grade>) {
   return await supabaseApiClient.updateGrade(id, updates)
 }
 

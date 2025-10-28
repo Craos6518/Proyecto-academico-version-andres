@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { supabaseAdmin } from '../../../lib/supabase-client'
 import bcrypt from 'bcryptjs'
 import { generateJWT, normalizeRole } from '../../../lib/auth'
+import type { User } from '../../../lib/types'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ message: 'Method not allowed' })
@@ -18,7 +19,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(500).json({ message: 'error interno' })
     }
 
-    const user = (data as any) || null
+    const user = (data as unknown as Record<string, unknown>) || null
     if (!user) {
       console.log(`[auth/login] usuario no encontrado: ${username}`)
       return res.status(401).json({ message: 'Usuario o contraseña incorrectos' })
@@ -31,7 +32,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // Soportar contraseñas almacenadas en texto plano (seed actual) o bcrypt
-    let match = false
+  let match = false
     try {
       const isBcrypt = typeof hash === 'string' && hash.startsWith('$2')
       if (isBcrypt) {
@@ -51,8 +52,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     console.log(`[auth/login] login exitoso: ${username}`)
-  const token = generateJWT({ ...(user as any) } as any)
-    const rawRole = user.roleName ?? user.role ?? user.role_name ?? ''
+    // Build a minimal User shape for token generation (avoid `any`)
+    const userForToken: User = {
+      id: Number(user.id ?? 0),
+      username: String(user.username ?? username),
+      email: String(user.email ?? ''),
+    }
+    const token = generateJWT(userForToken)
+    const rawRole = (user['roleName'] ?? user['role'] ?? user['role_name']) as string | undefined ?? ''
     const roleKey = normalizeRole(rawRole)
 
   // Set HttpOnly cookie with token (server-side session)
@@ -60,17 +67,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const secureFlag = process.env.NODE_ENV === 'production' ? '; Secure' : ''
   res.setHeader('Set-Cookie', `academic_auth_token=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secureFlag}`)
     // Normalize name fields to make client display consistent
-    const firstName = (user as any).first_name ?? (user as any).firstName ?? ""
-    const lastName = (user as any).last_name ?? (user as any).lastName ?? ""
-    const email = (user as any).email ?? ""
-  const displayName = ((user as any).display_name ?? (user as any).displayName ?? (`${firstName} ${lastName}`.trim())) || undefined
+      const firstName = String(user['first_name'] ?? user['firstName'] ?? '')
+      const lastName = String(user['last_name'] ?? user['lastName'] ?? '')
+      const email = String(user['email'] ?? '')
+      const displayName = String((user['display_name'] ?? user['displayName']) ?? `${firstName} ${lastName}`.trim()) || undefined
 
     // For security, do not return the token in the JSON body. Clients should rely on the HttpOnly cookie.
     return res.status(200).json({
       ok: true,
       user: {
-        id: user.id,
-        username: user.username,
+        id: Number(user['id'] ?? 0),
+        username: String(user['username'] ?? ''),
         firstName,
         lastName,
         displayName,

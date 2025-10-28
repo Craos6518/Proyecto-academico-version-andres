@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next"
 import { supabaseAdmin } from "../../../lib/supabase-client"
+import type { Role } from "../../../lib/types"
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
@@ -7,26 +8,41 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const { data, error } = await supabaseAdmin.from("users").select("*")
       if (error) throw error
       // Also fetch roles to map role names when DB stores only role_id
-      const { data: rolesData } = await supabaseAdmin.from("roles").select("*")
-      const rolesMap: Record<number, any> = {}
-      ;(rolesData || []).forEach((r: any) => (rolesMap[r.id] = r))
+  const { data: rolesData } = await supabaseAdmin.from("roles").select("*")
+  const rolesMap: Record<number, Role | undefined> = {}
+  // Normalize roles rows into typed Role entries conservatively
+  ;((rolesData || []) as Array<Record<string, unknown>>).forEach((r) => {
+    const id = Number(r["id"] ?? r["role_id"] ?? r["roleId"])
+    if (!Number.isNaN(id)) {
+      rolesMap[id] = {
+        id,
+        name: String(r["name"] ?? r["role_name"] ?? r["role"] ?? ""),
+        description: String(r["description"] ?? ""),
+      }
+    }
+  })
 
-      const mapped = (data || []).map((row: any) => ({
-        id: row.id,
-        username: row.username,
-        email: row.email,
-        firstName: row.first_name ?? row.firstName ?? "",
-        lastName: row.last_name ?? row.lastName ?? "",
-        roleId: row.role_id ?? row.roleId ?? null,
-        roleName:
-          row.role_name ?? row.roleName ?? row.role ?? (rolesMap[row.role_id] ? rolesMap[row.role_id].name : ""),
-        isActive: row.is_active ?? row.isActive ?? true,
-      }))
+      const mapped = (data || []).map((row) => {
+        const r = row as unknown as Record<string, unknown>
+        const roleId = (r["role_id"] ?? r["roleId"]) as number | null | undefined
+        const roleNameFromRow = (r["role_name"] ?? r["roleName"] ?? r["role"]) as string | undefined
+        const roleName = roleNameFromRow ?? (roleId && rolesMap[roleId] ? rolesMap[roleId]!.name : "")
+        return {
+          id: r["id"] as number,
+          username: (r["username"] ?? "") as string,
+          email: (r["email"] ?? "") as string,
+          firstName: (r["first_name"] ?? r["firstName"] ?? "") as string,
+          lastName: (r["last_name"] ?? r["lastName"] ?? "") as string,
+          roleId: (roleId ?? null) as number | null,
+          roleName,
+          isActive: (r["is_active"] ?? r["isActive"] ?? true) as boolean,
+        }
+      })
       return res.status(200).json(mapped)
     }
 
     if (req.method === "POST") {
-      const payload = req.body
+  const payload = req.body as Record<string, unknown>
       // Accept camelCase from client, convert to snake_case for DB
       const dbPayload = {
         id: payload.id ?? undefined,
@@ -47,38 +63,40 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           .order("id", { ascending: false })
           .limit(1)
         if (lastErr) throw lastErr
-        const maxId = (lastRows && lastRows.length > 0 && lastRows[0].id) ? Number(lastRows[0].id) : 0
+        const lr = (lastRows as Array<Record<string, unknown>> | null) || []
+        const maxId = lr.length > 0 ? Number(lr[0]["id"] ?? lr[0]["ID"] ?? 0) : 0
         dbPayload.id = maxId + 1
       }
       const { data, error } = await supabaseAdmin.from("users").insert(dbPayload).select().limit(1).single()
       if (error) throw error
-      const row = data
+      const row = data as unknown as Record<string, unknown>
       const mapped = {
-        id: row.id,
-        username: row.username,
-        email: row.email,
-        firstName: row.first_name ?? row.firstName ?? "",
-        lastName: row.last_name ?? row.lastName ?? "",
-        roleId: row.role_id ?? row.roleId ?? null,
-        roleName: row.role_name ?? row.roleName ?? row.role ?? "",
-        isActive: row.is_active ?? row.isActive ?? true,
+        id: row["id"] as number,
+        username: (row["username"] ?? "") as string,
+        email: (row["email"] ?? "") as string,
+        firstName: (row["first_name"] ?? row["firstName"] ?? "") as string,
+        lastName: (row["last_name"] ?? row["lastName"] ?? "") as string,
+        roleId: (row["role_id"] ?? row["roleId"] ?? null) as number | null,
+        roleName: (row["role_name"] ?? row["roleName"] ?? row["role"] ?? "") as string,
+        isActive: (row["is_active"] ?? row["isActive"] ?? true) as boolean,
       }
       return res.status(201).json(mapped)
     }
 
     if (req.method === "PUT") {
-      const { id, ...updates } = req.body
+  const { id, ...updates } = req.body as Record<string, unknown>
       if (!id) return res.status(400).json({ error: "Missing id" })
       // convert camelCase updates to snake_case DB columns
-      const dbUpdates: any = {}
-      if (updates.username !== undefined) dbUpdates.username = updates.username
-      if (updates.firstName !== undefined) dbUpdates.first_name = updates.firstName
-      if (updates.lastName !== undefined) dbUpdates.last_name = updates.lastName
-      if (updates.roleId !== undefined) dbUpdates.role_id = updates.roleId
-      if (updates.roleName !== undefined) dbUpdates.role_name = updates.roleName
-      if (updates.email !== undefined) dbUpdates.email = updates.email
-      if (updates.isActive !== undefined) dbUpdates.is_active = updates.isActive
-      if (updates.password !== undefined) dbUpdates.password = updates.password
+  const dbUpdates: Record<string, unknown> = {}
+  const updatesRec = updates as Record<string, unknown>
+  if (updatesRec["username"] !== undefined) dbUpdates.username = updatesRec["username"]
+  if (updatesRec["firstName"] !== undefined) dbUpdates.first_name = updatesRec["firstName"]
+  if (updatesRec["lastName"] !== undefined) dbUpdates.last_name = updatesRec["lastName"]
+  if (updatesRec["roleId"] !== undefined) dbUpdates.role_id = updatesRec["roleId"]
+  if (updatesRec["roleName"] !== undefined) dbUpdates.role_name = updatesRec["roleName"]
+  if (updatesRec["email"] !== undefined) dbUpdates.email = updatesRec["email"]
+  if (updatesRec["isActive"] !== undefined) dbUpdates.is_active = updatesRec["isActive"]
+  if (updatesRec["password"] !== undefined) dbUpdates.password = updatesRec["password"]
 
       const { data, error } = await supabaseAdmin.from("users").update(dbUpdates).eq("id", id).select().limit(1).single()
       if (error) throw error
@@ -101,7 +119,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (!id) return res.status(400).json({ error: "Missing id" })
       const userId = Number(id)
       // check for referencing rows in common tables
-      const referencing: Record<string, any> = {}
+  const referencing: Record<string, unknown> = {}
 
       const checks = await Promise.all([
         supabaseAdmin.from("enrollments").select("id").eq("student_id", userId).limit(1),
@@ -131,10 +149,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           supabaseAdmin.from("subjects").select("id").eq("teacher_id", userId),
         ])
 
-        const enrollIds = (enrollResIds.data || []).map((r: any) => r.id)
-        const gradesIds = (gradesResIds.data || []).map((r: any) => r.id)
-        const assignmentsIds = (assignmentsResIds.data || []).map((r: any) => r.id)
-        const subjectsIds = (subjectsResIds.data || []).map((r: any) => r.id)
+  const enrollIds = (enrollResIds.data || []).map((r) => (r as unknown as Record<string, unknown>)["id"] as number)
+  const gradesIds = (gradesResIds.data || []).map((r) => (r as unknown as Record<string, unknown>)["id"] as number)
+  const assignmentsIds = (assignmentsResIds.data || []).map((r) => (r as unknown as Record<string, unknown>)["id"] as number)
+  const subjectsIds = (subjectsResIds.data || []).map((r) => (r as unknown as Record<string, unknown>)["id"] as number)
 
         const deletedCounts: Record<string, number> = {
           enrollments: 0,
@@ -154,7 +172,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           if (!ids || ids.length === 0) return { count: 0, ids: [] }
           const { data, error } = await supabaseAdmin.from(table).delete().in("id", ids).select("id")
           if (error) throw error
-          return { count: (data || []).length, ids: (data || []).map((d: any) => d.id) }
+          return { count: (data || []).length, ids: (data || []).map((d) => (d as unknown as Record<string, unknown>)["id"] as number) }
         }
 
         // perform deletions in order to respect FK relationships
@@ -190,8 +208,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     return res.status(405).json({ error: "Method not allowed" })
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("admin/users error:", err)
-    return res.status(500).json({ error: err.message || "Error interno" })
+    const message = err instanceof Error ? err.message : String(err)
+    return res.status(500).json({ error: message || "Error interno" })
   }
 }

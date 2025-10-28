@@ -42,7 +42,7 @@ export default function LoginPage() {
         try {
           // Persist a safe user shape (authService will strip any token if present)
           authService.setCurrentUser(body.user)
-        } catch (e) {
+        } catch {
           // noop
         }
       } else {

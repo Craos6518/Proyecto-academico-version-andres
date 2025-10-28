@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import type { User } from "@/lib/types"
 import { useRouter } from "next/navigation"
 import { authService, normalizeRole } from "@/lib/auth"
 import { DashboardLayout } from "@/components/dashboard-layout"
@@ -12,7 +13,7 @@ import { BookOpen, TrendingUp, Award, AlertCircle } from "lucide-react"
 
 export default function StudentDashboard() {
   const router = useRouter()
-  const [user, setUser] = useState(authService.getCurrentUser())
+  const [user, setUser] = useState<User | null>(authService.getCurrentUser() as User | null)
   const [stats, setStats] = useState({
     enrolledSubjects: 0,
     averageGrade: 0,
@@ -45,14 +46,18 @@ export default function StudentDashboard() {
 
   if (!user) return null
 
-  const resolveDisplayName = (u: any) => {
+  const resolveDisplayName = (u?: User | Record<string, unknown>) => {
     if (!u) return "Estudiante"
-    const first = u.firstName ?? u.first_name
-    const last = u.lastName ?? u.last_name
+    const r = u as Record<string, unknown>
+    const first = (r["firstName"] ?? r["first_name"]) as string | undefined
+    const last = (r["lastName"] ?? r["last_name"]) as string | undefined
     if (first || last) return `${first ?? ""} ${last ?? ""}`.trim()
-    if (u.displayName) return u.displayName
-    if (u.username) return u.username
-    if (u.email) return String(u.email).split("@")[0]
+    const displayName = r["displayName"] as string | undefined
+    if (displayName) return displayName
+    const username = r["username"] as string | undefined
+    if (username) return username
+    const email = r["email"] as string | undefined
+    if (email) return String(email).split("@")[0]
     return "Estudiante"
   }
 

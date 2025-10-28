@@ -18,7 +18,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import type { Subject } from "@/lib/types"
+import type { Subject, User } from "@/lib/types"
 import { Plus, Pencil, Trash2, Search } from "lucide-react"
 
 export function SubjectsManagement() {
@@ -38,13 +38,27 @@ export function SubjectsManagement() {
     teacherId: 0,
   })
 
-  const [teachers, setTeachers] = useState<any[]>([])
+  const [teachers, setTeachers] = useState<User[]>([])
 
   useEffect(() => {
     loadSubjects()
     fetch('/api/admin/users')
       .then((r) => r.json())
-      .then((data) => setTeachers((data || []).filter((u: any) => (u.roleName ?? u.role_name) === 'Profesor')))
+      .then((data) => {
+        const arr = (data || []) as Array<Record<string, unknown>>
+        const profs: User[] = arr
+          .filter((u) => ((u['roleName'] as string | undefined) ?? (u['role_name'] as string | undefined)) === 'Profesor')
+          .map((u) => ({
+            id: Number(u['id']),
+            username: String(u['username'] ?? ''),
+            email: String(u['email'] ?? ''),
+            firstName: String(u['firstName'] ?? u['first_name'] ?? ''),
+            lastName: String(u['lastName'] ?? u['last_name'] ?? ''),
+            roleName: String((u['roleName'] ?? u['role_name']) ?? ''),
+          }))
+
+        setTeachers(profs)
+      })
       .catch((err) => console.error('Failed to load teachers', err))
   }, [])
 
@@ -108,8 +122,10 @@ export function SubjectsManagement() {
         try {
           const body = await res.json()
           msg = body?.error || JSON.stringify(body)
-        } catch (e) {
-          try { msg = await res.text() } catch (_) {}
+        } catch {
+          try { msg = await res.text() } catch {
+            // ignore
+          }
         }
         setDeleteErrorMessage(msg)
         return

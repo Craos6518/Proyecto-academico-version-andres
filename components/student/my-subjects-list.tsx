@@ -3,14 +3,14 @@
 import { useState, useEffect } from "react"
 import { Badge } from "@/components/ui/badge"
 // Eliminado: lógica de simulación y mock-data
-import { BookOpen, User, Calculator, ChevronDown, ChevronUp, FileText, Calendar, Percent } from "lucide-react"
+import { BookOpen, Calculator, ChevronDown, ChevronUp, FileText } from "lucide-react"
 
 interface MySubjectsListProps {
   studentId: string | number
 }
 
 export function MySubjectsList({ studentId }: MySubjectsListProps) {
-  const [subjects, setSubjects] = useState<any[]>([])
+  const [subjects, setSubjects] = useState<Array<Record<string, unknown>>>([])
   const [expandedSubject, setExpandedSubject] = useState<string | null>(null)
   const [loading, setLoading] = useState<boolean>(true)
   const [error, setError] = useState<string>("")
@@ -23,10 +23,10 @@ export function MySubjectsList({ studentId }: MySubjectsListProps) {
     })
       .then((res) => res.json())
       .then((data) => {
-        setSubjects(data.subjects || [])
+        setSubjects((data?.subjects as Array<Record<string, unknown>>) || [])
         setLoading(false)
       })
-      .catch((err) => {
+      .catch(() => {
         setError("Error al cargar datos reales")
         setLoading(false)
       })
@@ -54,20 +54,24 @@ export function MySubjectsList({ studentId }: MySubjectsListProps) {
   return (
     <div className="space-y-4">
       {subjects.map((subject) => {
-        const isExpanded = expandedSubject === String(subject.id || subject.subject_id)
-        const finalGrade = subject.grade ?? null
-        const assignments = subject.assignments || []
+        const subj = subject as Record<string, unknown>
+        const sid = subj["id"] ?? subj["subject_id"] ?? null
+        const idStr = String(sid ?? "")
+        const isExpanded = expandedSubject === idStr
+        const finalGradeRaw = subj["grade"] ?? subj["finalGrade"] ?? null
+        const finalGrade = finalGradeRaw != null ? Number(finalGradeRaw) : null
+        const assignments = (subj["assignments"] as Array<Record<string, unknown>> | undefined) || []
         return (
-          <div key={subject.id || subject.subject_id} className="border rounded-lg overflow-hidden">
+          <div key={idStr} className="border rounded-lg overflow-hidden">
             <button
-              onClick={() => toggleSubject(String(subject.id || subject.subject_id))}
+              onClick={() => toggleSubject(idStr)}
               className="w-full p-4 hover:bg-accent/50 transition-colors text-left"
             >
               <div className="flex items-start justify-between mb-3">
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
                     <BookOpen className="w-4 h-4 text-muted-foreground" />
-                    <h3 className="font-semibold">{subject.name}</h3>
+                    <h3 className="font-semibold">{String(subj["name"] ?? subj["title"] ?? "")}</h3>
                     {isExpanded ? (
                       <ChevronUp className="w-4 h-4 text-muted-foreground" />
                     ) : (
@@ -93,11 +97,11 @@ export function MySubjectsList({ studentId }: MySubjectsListProps) {
                 <div>
                   <div className="mb-2">
                     <h4 className="font-semibold text-sm">Descripción</h4>
-                    <p className="text-sm text-muted-foreground pl-6">{subject.description || "Sin descripción"}</p>
+                    <p className="text-sm text-muted-foreground pl-6">{String(subj["description"] ?? "Sin descripción")}</p>
                   </div>
                   <div className="mb-2">
                     <h4 className="font-semibold text-sm">Profesor</h4>
-                    <p className="text-sm text-muted-foreground pl-6">{subject.teacherName || "Desconocido"}</p>
+                    <p className="text-sm text-muted-foreground pl-6">{String(subj["teacherName"] ?? subj["teacher"] ?? "Desconocido")}</p>
                   </div>
                   <div>
                     <div className="flex items-center gap-2 mb-2">
@@ -106,13 +110,20 @@ export function MySubjectsList({ studentId }: MySubjectsListProps) {
                     </div>
                     {assignments.length > 0 ? (
                       <div className="space-y-2 pl-6">
-                        {assignments.map((a: any) => (
-                          <div key={a.id} className="flex items-center gap-3">
-                            <Badge variant="outline">{a.title || a.name || a.assignmentName || "Evaluación"}</Badge>
-                            <div className="text-xs text-muted-foreground">{a.description || a.comment || ""}</div>
-                            <div className="ml-auto text-sm">{a.studentGrade !== null ? `Tu nota: ${a.studentGrade}` : "Sin nota"}</div>
-                          </div>
-                        ))}
+                        {assignments.map((a) => {
+                          const asg = a as Record<string, unknown>
+                          const title = String(asg["title"] ?? asg["name"] ?? asg["assignmentName"] ?? "Evaluación")
+                          const desc = String(asg["description"] ?? asg["comment"] ?? "")
+                          const studentGradeRaw = asg["studentGrade"] ?? asg["grade"] ?? null
+                          const studentGrade = studentGradeRaw != null ? Number(studentGradeRaw) : null
+                          return (
+                            <div key={String(asg["id"] ?? asg["ID"] ?? title)} className="flex items-center gap-3">
+                              <Badge variant="outline">{title}</Badge>
+                              <div className="text-xs text-muted-foreground">{desc}</div>
+                              <div className="ml-auto text-sm">{studentGrade !== null ? `Tu nota: ${studentGrade}` : "Sin nota"}</div>
+                            </div>
+                          )
+                        })}
                       </div>
                     ) : (
                       <p className="text-sm text-muted-foreground pl-6">No hay evaluaciones registradas</p>

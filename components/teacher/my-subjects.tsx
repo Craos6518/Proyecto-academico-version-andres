@@ -37,10 +37,11 @@ export function MySubjects({ teacherId }: MySubjectsProps) {
             fetch(`/api/admin/assignments`),
           ])
           if (enrRes.ok) {
-            const allEnrollments: any[] = await enrRes.json()
+            const allEnrollments = (await enrRes.json()) as Array<Record<string, unknown>>
             const eMap: Record<number, number> = {}
             allEnrollments.forEach((en) => {
-              const sid = en.subjectId ?? en.subject_id
+              const sidRaw = en["subjectId"] ?? en["subject_id"] ?? null
+              const sid = sidRaw != null ? Number(sidRaw) : null
               if (sid == null) return
               eMap[sid] = (eMap[sid] || 0) + 1
             })
@@ -79,12 +80,16 @@ export function MySubjects({ teacherId }: MySubjectsProps) {
 
         if (!enrRes.ok || !assignRes.ok || !usersRes.ok) throw new Error("Error fetching details")
 
-  const enrollments: any[] = await enrRes.json()
+        const enrollments = (await enrRes.json()) as Array<Record<string, unknown>>
         const assignmentsData: Assignment[] = await assignRes.json()
         const allUsers: User[] = await usersRes.json()
 
         const students = enrollments
-          .map((en: any) => allUsers.find((u) => u.id === en.studentId))
+          .map((en) => {
+            const sidRaw = en["studentId"] ?? en["student_id"] ?? null
+            const sid = sidRaw != null ? Number(sidRaw) : null
+            return sid != null ? allUsers.find((u) => u.id === sid) : undefined
+          })
           .filter((s): s is User => s !== undefined && s !== null)
         // Eliminar duplicados por id
         const uniqueStudents = students.filter((s, idx, arr) => arr.findIndex(u => u.id === s.id) === idx)

@@ -39,9 +39,16 @@ const BreadcrumbLink = React.forwardRef<
   HTMLAnchorElement | React.ElementRef<typeof Slot>,
   BreadcrumbLinkProps
 >(({ asChild, className, ...props }, ref) => {
-  const Comp: any = asChild ? Slot : 'a'
+  // Branch rendering used; no `Comp` variable needed.
 
-  return <Comp ref={ref as any} className={cn('text-muted-foreground hover:underline', className)} {...props} />
+  // Safe cast to forwarded ref without `any`.
+  const _ref = ref as unknown as React.ForwardedRef<HTMLAnchorElement | React.ElementRef<typeof Slot>>
+
+  if (asChild) {
+    return <Slot ref={_ref as React.ForwardedRef<React.ElementRef<typeof Slot>>} className={cn('text-muted-foreground hover:underline', className)} {...props} />
+  }
+
+  return <a ref={_ref as React.ForwardedRef<HTMLAnchorElement>} className={cn('text-muted-foreground hover:underline', className)} {...props} />
 })
 BreadcrumbLink.displayName = 'BreadcrumbLink'
 

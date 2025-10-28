@@ -24,7 +24,7 @@ export function generateJWT(user: JwtUser) {
 export function verifyJWT(token: string): null | { id: number; username: string; role: string } {
   try {
     return jwt.verify(token, JWT_SECRET) as { id: number; username: string; role: string }
-  } catch (err) {
+  } catch {
     return null
   }
 }

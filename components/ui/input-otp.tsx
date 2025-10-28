@@ -8,21 +8,28 @@ import { cn } from '@/lib/utils'
 
 const InputOTP = React.forwardRef<
   HTMLDivElement,
-  React.ComponentProps<typeof OTPInput> & { containerClassName?: string }
+  React.ComponentPropsWithoutRef<'div'> & { containerClassName?: string }
 >(function InputOTP({ className, containerClassName, ...props }, ref) {
+  const _ref = ref as unknown as React.Ref<HTMLInputElement>
+  const _props = props as unknown as Record<string, unknown>
+  const _maxLength = typeof _props['maxLength'] === 'number' ? (_props['maxLength'] as number) : Number(_props['maxLength'] ?? 6)
+  const _children = _props['children'] as React.ReactNode | undefined
+
   return (
     <OTPInput
-      ref={ref as any}
+      ref={_ref}
       data-slot="input-otp"
+      maxLength={_maxLength}
       containerClassName={cn(
         'flex items-center gap-2 has-disabled:opacity-50',
         containerClassName,
       )}
       className={cn('disabled:cursor-not-allowed', className)}
-      {...props}
-    />
-  );
-});
+    >
+      {_children}
+    </OTPInput>
+  )
+})
 
 const InputOTPGroup = React.forwardRef<HTMLDivElement, React.ComponentProps<'div'>>(
   function InputOTPGroup({ className, ...props }, ref) {

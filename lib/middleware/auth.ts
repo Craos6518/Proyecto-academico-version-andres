@@ -3,7 +3,10 @@ import { verifyJWT, normalizeRole } from "../../lib/auth"
 import { supabaseAdmin } from "../supabase-client"
 
 // Middleware para proteger rutas y verificar roles
-export function withAuth(handler: Function, allowedRoles: string[] = []) {
+export function withAuth(
+  handler: (req: NextApiRequest, res: NextApiResponse) => Promise<unknown> | unknown,
+  allowedRoles: string[] = []
+) {
   return async (req: NextApiRequest, res: NextApiResponse) => {
     const authHeader = req.headers.authorization || req.headers.Authorization
     let token = typeof authHeader === "string" && authHeader.startsWith("Bearer ")
@@ -14,7 +17,7 @@ export function withAuth(handler: Function, allowedRoles: string[] = []) {
     if (!token) {
       try {
         // Next.js API routes may expose parsed cookies in req.cookies
-        const cookies = (req as any).cookies
+        const cookies = (req as unknown as { cookies?: Record<string, string> }).cookies
         if (cookies && cookies.academic_auth_token) {
           token = cookies.academic_auth_token
         } else if (typeof req.headers.cookie === 'string') {
@@ -25,7 +28,7 @@ export function withAuth(handler: Function, allowedRoles: string[] = []) {
             if (k === 'academic_auth_token') token = decodeURIComponent(v.join('='))
           })
         }
-      } catch (e) {
+      } catch {
         // ignore cookie parsing errors
       }
     }
@@ -43,32 +46,33 @@ export function withAuth(handler: Function, allowedRoles: string[] = []) {
       if (allowed.length > 0 && payloadRole && !allowed.includes(payloadRole)) {
         return res.status(403).json({ error: "No tienes permisos para acceder a esta ruta" })
       }
-      ;(req as any).user = payload
+      ;(req as unknown as { user?: unknown }).user = payload
       return handler(req, res)
     }
 
     // Fallback: si es un token de Supabase (access token), tratamos de obtener el usuario
-    try {
-      const { data: sbUser, error } = await supabaseAdmin.auth.getUser(token)
-      if (error || !sbUser) {
+      try {
+        const { data: sbUser, error } = await supabaseAdmin.auth.getUser(token)
+        if (error || !sbUser) {
+          return res.status(401).json({ error: "Token inválido o expirado" })
+        }
+
+        // Obtenemos info adicional desde la tabla users
+        const { data: dbUser } = await supabaseAdmin.from("users").select("*").eq("email", sbUser.user?.email).limit(1).maybeSingle()
+        const dbRec = dbUser as unknown as Record<string, unknown>
+        const rawRole = (dbRec["roleName"] ?? dbRec["role"] ?? dbRec["role_name"]) as string | undefined
+        const role = normalizeRole(rawRole)
+
+        const allowed = allowedRoles.map((r) => String(r).toLowerCase())
+        if (allowed.length > 0 && role && !allowed.includes(role)) {
+          return res.status(403).json({ error: "No tienes permisos para acceder a esta ruta" })
+        }
+
+        ;(req as unknown as { user?: unknown }).user = { id: sbUser.user?.id, email: sbUser.user?.email, role, roleName: rawRole }
+        return handler(req, res)
+      } catch (err: unknown) {
+        console.error("Auth middleware error:", err)
         return res.status(401).json({ error: "Token inválido o expirado" })
       }
-
-      // Obtenemos info adicional desde la tabla users
-      const { data: dbUser } = await supabaseAdmin.from("users").select("*").eq("email", sbUser.user?.email).limit(1).maybeSingle()
-      const rawRole = (dbUser as any)?.roleName ?? (dbUser as any)?.role ?? (dbUser as any)?.role_name ?? ""
-      const role = normalizeRole(rawRole)
-
-      const allowed = allowedRoles.map((r) => String(r).toLowerCase())
-      if (allowed.length > 0 && role && !allowed.includes(role)) {
-        return res.status(403).json({ error: "No tienes permisos para acceder a esta ruta" })
-      }
-
-      ;(req as any).user = { id: sbUser.user?.id, email: sbUser.user?.email, role, roleName: rawRole }
-      return handler(req, res)
-    } catch (err) {
-      console.error("Auth middleware error:", err)
-      return res.status(401).json({ error: "Token inválido o expirado" })
-    }
   }
 }

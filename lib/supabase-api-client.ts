@@ -24,18 +24,21 @@ export class SupabaseApiClient {
       return []
     }
     // Map snake_case DB fields to camelCase User type
-    return (data ?? []).map((row: any) => ({
-      id: row.id,
-      username: row.username,
-      email: row.email,
-      firstName: row.first_name ?? row.firstName,
-      lastName: row.last_name ?? row.lastName,
-      roleId: row.role_id ?? row.roleId,
-      roleName: row.role_name ?? row.roleName,
-      role: row.role ?? row.role,
-      isActive: row.is_active ?? row.isActive,
-      password_hash: row.password_hash ?? row.passwordHash,
-    })) as User[]
+    return (data ?? []).map((row) => {
+      const r = row as unknown as Record<string, unknown>
+      return {
+        id: r["id"] as number,
+        username: (r["username"] ?? "") as string,
+        email: (r["email"] ?? "") as string,
+        firstName: (r["first_name"] ?? r["firstName"]) as string | undefined,
+        lastName: (r["last_name"] ?? r["lastName"]) as string | undefined,
+        roleId: (r["role_id"] ?? r["roleId"]) as number | undefined,
+        roleName: (r["role_name"] ?? r["roleName"]) as string | undefined,
+        role: (r["role"] ?? r["role"]) as string | undefined,
+        isActive: (r["is_active"] ?? r["isActive"]) as boolean | undefined,
+        password_hash: (r["password_hash"] ?? r["passwordHash"]) as string | undefined,
+      }
+    }) as User[]
   }
 
   async getUserById(id: number): Promise<User | undefined> {
@@ -150,13 +153,16 @@ export class SupabaseApiClient {
   const supabaseAdmin = await getAdminClient()
   const { data, error } = await supabaseAdmin.from("enrollments").select("*")
     if (error) return []
-    return (data ?? []).map((row: any) => ({
-      id: row.id,
-      studentId: row.student_id ?? row.studentId,
-      subjectId: row.subject_id ?? row.subjectId,
-      enrollmentDate: row.enrollment_date ?? row.enrollmentDate,
-      status: row.status,
-    })) as Enrollment[]
+    return (data ?? []).map((row) => {
+      const r = row as unknown as Record<string, unknown>
+      return {
+        id: r["id"] as number,
+        studentId: (r["student_id"] ?? r["studentId"]) as number,
+        subjectId: (r["subject_id"] ?? r["subjectId"]) as number,
+        enrollmentDate: (r["enrollment_date"] ?? r["enrollmentDate"]) as string,
+        status: (r["status"] ?? "") as string,
+      }
+    }) as Enrollment[]
   }
 
   async getEnrollmentsByStudent(studentId: number): Promise<Enrollment[]> {
@@ -164,26 +170,32 @@ export class SupabaseApiClient {
   // Query using snake_case column name
   const { data, error } = await supabaseAdmin.from("enrollments").select("*").eq("student_id", studentId)
     if (error) return []
-    return (data ?? []).map((row: any) => ({
-      id: row.id,
-      studentId: row.student_id ?? row.studentId,
-      subjectId: row.subject_id ?? row.subjectId,
-      enrollmentDate: row.enrollment_date ?? row.enrollmentDate,
-      status: row.status,
-    })) as Enrollment[]
+    return (data ?? []).map((row) => {
+      const r = row as unknown as Record<string, unknown>
+      return {
+        id: r["id"] as number,
+        studentId: (r["student_id"] ?? r["studentId"]) as number,
+        subjectId: (r["subject_id"] ?? r["subjectId"]) as number,
+        enrollmentDate: (r["enrollment_date"] ?? r["enrollmentDate"]) as string,
+        status: (r["status"] ?? "") as string,
+      }
+    }) as Enrollment[]
   }
 
   async getEnrollmentsBySubject(subjectId: number): Promise<Enrollment[]> {
   const supabaseAdmin = await getAdminClient()
   const { data, error } = await supabaseAdmin.from("enrollments").select("*").eq("subject_id", subjectId)
     if (error) return []
-    return (data ?? []).map((row: any) => ({
-      id: row.id,
-      studentId: row.student_id ?? row.studentId,
-      subjectId: row.subject_id ?? row.subjectId,
-      enrollmentDate: row.enrollment_date ?? row.enrollmentDate,
-      status: row.status,
-    })) as Enrollment[]
+    return (data ?? []).map((row) => {
+      const r = row as unknown as Record<string, unknown>
+      return {
+        id: r["id"] as number,
+        studentId: (r["student_id"] ?? r["studentId"]) as number,
+        subjectId: (r["subject_id"] ?? r["subjectId"]) as number,
+        enrollmentDate: (r["enrollment_date"] ?? r["enrollmentDate"]) as string,
+        status: (r["status"] ?? "") as string,
+      }
+    }) as Enrollment[]
   }
 
   async createEnrollment(enrollment: Omit<Enrollment, "id">): Promise<Enrollment | null> {
@@ -251,48 +263,60 @@ export class SupabaseApiClient {
   const supabaseAdmin = await getAdminClient()
   const { data, error } = await supabaseAdmin.from("grades").select("*")
     if (error) return []
-    return (data ?? []).map((row: any) => ({
-      id: row.id,
-      studentId: row.student_id ?? row.studentId,
-      assignmentId: row.assignment_id ?? row.assignmentId,
-      subjectId: row.subject_id ?? row.subjectId,
-      score: typeof row.score === 'string' ? parseFloat(row.score) : row.score,
-      gradedBy: row.graded_by ?? row.gradedBy,
-      gradedAt: row.graded_at ?? row.gradedAt,
-      comments: row.comments,
-    })) as Grade[]
+    return (data ?? []).map((row) => {
+      const r = row as unknown as Record<string, unknown>
+      const scoreVal = r["score"]
+      return {
+        id: r["id"] as number,
+        studentId: (r["student_id"] ?? r["studentId"]) as number,
+        assignmentId: (r["assignment_id"] ?? r["assignmentId"]) as number,
+        subjectId: (r["subject_id"] ?? r["subjectId"]) as number,
+        score: typeof scoreVal === 'string' ? parseFloat(scoreVal as string) : (scoreVal as number),
+        gradedBy: (r["graded_by"] ?? r["gradedBy"]) as number,
+        gradedAt: (r["graded_at"] ?? r["gradedAt"]) as string,
+        comments: (r["comments"] ?? null) as string | null,
+      }
+    }) as Grade[]
   }
 
   async getGradesByStudent(studentId: number): Promise<Grade[]> {
   const supabaseAdmin = await getAdminClient()
   const { data, error } = await supabaseAdmin.from("grades").select("*").eq("student_id", studentId)
     if (error) return []
-    return (data ?? []).map((row: any) => ({
-      id: row.id,
-      studentId: row.student_id ?? row.studentId,
-      assignmentId: row.assignment_id ?? row.assignmentId,
-      subjectId: row.subject_id ?? row.subjectId,
-      score: typeof row.score === 'string' ? parseFloat(row.score) : row.score,
-      gradedBy: row.graded_by ?? row.gradedBy,
-      gradedAt: row.graded_at ?? row.gradedAt,
-      comments: row.comments,
-    })) as Grade[]
+    return (data ?? []).map((row) => {
+      const r = row as unknown as Record<string, unknown>
+      const scoreVal = r["score"]
+      return {
+        id: r["id"] as number,
+        studentId: (r["student_id"] ?? r["studentId"]) as number,
+        assignmentId: (r["assignment_id"] ?? r["assignmentId"]) as number,
+        subjectId: (r["subject_id"] ?? r["subjectId"]) as number,
+        score: typeof scoreVal === 'string' ? parseFloat(scoreVal as string) : (scoreVal as number),
+        gradedBy: (r["graded_by"] ?? r["gradedBy"]) as number,
+        gradedAt: (r["graded_at"] ?? r["gradedAt"]) as string,
+        comments: (r["comments"] ?? null) as string | null,
+      }
+    }) as Grade[]
   }
 
   async getGradesBySubject(subjectId: number): Promise<Grade[]> {
   const supabaseAdmin = await getAdminClient()
   const { data, error } = await supabaseAdmin.from("grades").select("*").eq("subject_id", subjectId)
     if (error) return []
-    return (data ?? []).map((row: any) => ({
-      id: row.id,
-      studentId: row.student_id ?? row.studentId,
-      assignmentId: row.assignment_id ?? row.assignmentId,
-      subjectId: row.subject_id ?? row.subjectId,
-      score: typeof row.score === 'string' ? parseFloat(row.score) : row.score,
-      gradedBy: row.graded_by ?? row.gradedBy,
-      gradedAt: row.graded_at ?? row.gradedAt,
-      comments: row.comments,
-    })) as Grade[]
+    return (data ?? []).map((row) => {
+      const r = row as unknown as Record<string, unknown>
+      const scoreVal = r["score"]
+      return {
+        id: r["id"] as number,
+        studentId: (r["student_id"] ?? r["studentId"]) as number,
+        assignmentId: (r["assignment_id"] ?? r["assignmentId"]) as number,
+        subjectId: (r["subject_id"] ?? r["subjectId"]) as number,
+        score: typeof scoreVal === 'string' ? parseFloat(scoreVal as string) : (scoreVal as number),
+        gradedBy: (r["graded_by"] ?? r["gradedBy"]) as number,
+        gradedAt: (r["graded_at"] ?? r["gradedAt"]) as string,
+        comments: (r["comments"] ?? null) as string | null,
+      }
+    }) as Grade[]
   }
 
   async getGradesByStudentAndSubject(studentId: number, subjectId: number): Promise<Grade[]> {
@@ -304,16 +328,20 @@ export class SupabaseApiClient {
       .eq("subject_id", subjectId)
 
     if (error) return []
-    return (data ?? []).map((row: any) => ({
-      id: row.id,
-      studentId: row.student_id ?? row.studentId,
-      assignmentId: row.assignment_id ?? row.assignmentId,
-      subjectId: row.subject_id ?? row.subjectId,
-      score: typeof row.score === 'string' ? parseFloat(row.score) : row.score,
-      gradedBy: row.graded_by ?? row.gradedBy,
-      gradedAt: row.graded_at ?? row.gradedAt,
-      comments: row.comments,
-    })) as Grade[]
+    return (data ?? []).map((row) => {
+      const r = row as unknown as Record<string, unknown>
+      const scoreVal = r["score"]
+      return {
+        id: r["id"] as number,
+        studentId: (r["student_id"] ?? r["studentId"]) as number,
+        assignmentId: (r["assignment_id"] ?? r["assignmentId"]) as number,
+        subjectId: (r["subject_id"] ?? r["subjectId"]) as number,
+        score: typeof scoreVal === 'string' ? parseFloat(scoreVal as string) : (scoreVal as number),
+        gradedBy: (r["graded_by"] ?? r["gradedBy"]) as number,
+        gradedAt: (r["graded_at"] ?? r["gradedAt"]) as string,
+        comments: (r["comments"] ?? null) as string | null,
+      }
+    }) as Grade[]
   }
 
   async createGrade(grade: Omit<Grade, "id">): Promise<Grade | null> {

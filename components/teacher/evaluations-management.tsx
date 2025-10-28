@@ -53,13 +53,43 @@ export function EvaluationsManagement({ teacherId }: EvaluationsManagementProps)
       try {
         const subjectsRes = await fetch(`/api/admin/subjects?teacherId=${teacherId}`)
         if (!subjectsRes.ok) throw new Error("Error fetching subjects")
-        const teacherSubjects = await subjectsRes.json()
+  const teacherSubjects: Subject[] = await subjectsRes.json()
         setSubjects(teacherSubjects)
 
         const assignsRes = await fetch(`/api/teacher/assignments`)
         if (!assignsRes.ok) throw new Error("Error fetching assignments")
-        const allAssignments = await assignsRes.json()
-        const teacherAssignments = allAssignments.filter((a: any) => teacherSubjects.some((s: any) => s.id === a.subjectId))
+        const allAssignmentsRaw = (await assignsRes.json()) as Array<Record<string, unknown>>
+        const teacherAssignments = allAssignmentsRaw
+          .filter((a) => {
+            const subjId = Number(a["subjectId"] ?? a["subject_id"] ?? 0)
+            return teacherSubjects.some((s: Subject) => s.id === subjId)
+          })
+          .map((a) => {
+            const id = Number(a["id"] ?? 0)
+            const subjectId = Number(a["subjectId"] ?? a["subject_id"] ?? 0)
+            const name = String(a["name"] ?? "")
+            const description = a["description"] != null ? String(a["description"]) : undefined
+            const rawType = String(a["assignmentType"] ?? a["assignment_type"] ?? "parcial1")
+            const assignmentType = (rawType === "parcial1" || rawType === "parcial2" || rawType === "final")
+              ? (rawType as Assignment["assignmentType"]) : ("parcial1" as Assignment["assignmentType"])
+            const maxScore = a["maxScore"] != null ? Number(a["maxScore"]) : Number(a["max_score"] ?? 5)
+            const weight = a["weight"] != null ? Number(a["weight"]) : Number(a["weight"] ?? 0)
+            const dueDate = a["dueDate"] ?? a["due_date"] ?? ""
+            const createdAt = a["createdAt"] != null ? String(a["createdAt"]) : undefined
+            const updatedAt = a["updatedAt"] != null ? String(a["updatedAt"]) : undefined
+            return {
+              id,
+              subjectId,
+              name,
+              description,
+              assignmentType,
+              maxScore,
+              weight,
+              dueDate: String(dueDate),
+              createdAt,
+              updatedAt,
+            } as Assignment
+          })
         setAssignments(teacherAssignments)
       } catch (err) {
         console.error(err)
@@ -84,12 +114,13 @@ export function EvaluationsManagement({ teacherId }: EvaluationsManagementProps)
   }
 
   const getAssignmentTypeBadge = (type: string) => {
-    const variants = {
+    type BadgeVariant = "default" | "secondary" | "destructive" | "outline"
+    const variants: Record<string, BadgeVariant> = {
       parcial1: "default",
       parcial2: "secondary",
       final: "destructive",
     }
-    return variants[type as keyof typeof variants] || "default"
+    return variants[type as keyof typeof variants] ?? "default"
   }
 
   const calculateWeightTotal = (subjectId: number, excludeId?: number) => {
@@ -148,9 +179,22 @@ export function EvaluationsManagement({ teacherId }: EvaluationsManagementProps)
 
         // reload
         const assignsRes = await fetch(`/api/teacher/assignments`)
-        const allAssignments = await assignsRes.json()
-        const teacherAssignments = allAssignments.filter((a: any) => subjects.some((s) => s.id === a.subjectId))
-        setAssignments(teacherAssignments)
+        const allAssignmentsRaw = (await assignsRes.json()) as Array<Record<string, unknown>>
+        const teacherAssignmentsReload = allAssignmentsRaw
+          .filter((a) => subjects.some((s) => s.id === Number(a["subjectId"] ?? a["subject_id"] ?? 0)))
+          .map((a) => ({
+            id: Number(a["id"] ?? 0),
+            subjectId: Number(a["subjectId"] ?? a["subject_id"] ?? 0),
+            name: String(a["name"] ?? ""),
+            description: a["description"] != null ? String(a["description"]) : undefined,
+            assignmentType: (String(a["assignmentType"] ?? a["assignment_type"] ?? "parcial1") as Assignment["assignmentType"]),
+            maxScore: a["maxScore"] != null ? Number(a["maxScore"]) : Number(a["max_score"] ?? 5),
+            weight: a["weight"] != null ? Number(a["weight"]) : Number(a["weight"] ?? 0),
+            dueDate: String(a["dueDate"] ?? a["due_date"] ?? ""),
+            createdAt: a["createdAt"] != null ? String(a["createdAt"]) : undefined,
+            updatedAt: a["updatedAt"] != null ? String(a["updatedAt"]) : undefined,
+          })) as Assignment[]
+        setAssignments(teacherAssignmentsReload)
         setIsDialogOpen(false)
       } catch (err) {
         console.error(err)
@@ -172,15 +216,37 @@ export function EvaluationsManagement({ teacherId }: EvaluationsManagementProps)
       const res = await fetch(`/api/teacher/assignments?id=${deleteCandidate.id}`, { method: "DELETE" })
       if (!res.ok) {
         let msg = 'Error eliminando la evaluación'
-        try { const body = await res.json(); msg = body?.error || JSON.stringify(body) } catch (e) { try { msg = await res.text() } catch(_){} }
+        try {
+          const body = await res.json()
+          msg = body?.error || JSON.stringify(body)
+        } catch {
+          try {
+            msg = await res.text()
+          } catch {
+            // ignore
+          }
+        }
         setDeleteErrorMessage(msg)
         return
       }
-      // reload assignments
-      const assignsRes = await fetch(`/api/teacher/assignments`)
-      const allAssignments = await assignsRes.json()
-      const teacherAssignments = allAssignments.filter((a: any) => subjects.some((s) => s.id === a.subjectId))
-      setAssignments(teacherAssignments)
+        // reload assignments
+        const assignsRes2 = await fetch(`/api/teacher/assignments`)
+        const allAssignments2 = (await assignsRes2.json()) as Array<Record<string, unknown>>
+        const teacherAssignments2 = allAssignments2
+          .filter((a) => subjects.some((s) => s.id === Number(a["subjectId"] ?? a["subject_id"] ?? 0)))
+          .map((a) => ({
+            id: Number(a["id"] ?? 0),
+            subjectId: Number(a["subjectId"] ?? a["subject_id"] ?? 0),
+            name: String(a["name"] ?? ""),
+            description: a["description"] != null ? String(a["description"]) : undefined,
+            assignmentType: (String(a["assignmentType"] ?? a["assignment_type"] ?? "parcial1") as Assignment["assignmentType"]),
+            maxScore: a["maxScore"] != null ? Number(a["maxScore"]) : Number(a["max_score"] ?? 5),
+            weight: a["weight"] != null ? Number(a["weight"]) : Number(a["weight"] ?? 0),
+            dueDate: String(a["dueDate"] ?? a["due_date"] ?? ""),
+            createdAt: a["createdAt"] != null ? String(a["createdAt"]) : undefined,
+            updatedAt: a["updatedAt"] != null ? String(a["updatedAt"]) : undefined,
+          })) as Assignment[]
+        setAssignments(teacherAssignments2)
       setIsDeleteDialogOpen(false)
       setDeleteCandidate(null)
       setDeleteErrorMessage(null)
@@ -436,7 +502,7 @@ export function EvaluationsManagement({ teacherId }: EvaluationsManagementProps)
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={getAssignmentTypeBadge(assignment.assignmentType) as any}>
+                      <Badge variant={getAssignmentTypeBadge(assignment.assignmentType)}>
                         {getAssignmentTypeLabel(assignment.assignmentType)}
                       </Badge>
                     </TableCell>
