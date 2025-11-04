@@ -91,7 +91,9 @@ export function UsersManagement() {
   const [passwordSuccess, setPasswordSuccess] = useState(false)
 
   const currentUser = authService.getCurrentUser()
-  const isDirector = normalizeRole(currentUser?.role ?? currentUser?.roleName) === "director"
+  const currentRole = normalizeRole(currentUser?.role ?? currentUser?.roleName)
+  const isDirector = currentRole === "director"
+  const isAdmin = currentRole === "admin"
 
   useEffect(() => {
     loadUsers()
@@ -124,10 +126,12 @@ export function UsersManagement() {
       .then((data) => {
   const arr = (data || []) as Array<Record<string, unknown>>
   const mapped: Role[] = arr.map((r) => ({ id: Number(r['id'] ?? 0), name: String(r['name'] ?? ''), description: String(r['description'] ?? '') }))
-  setAvailableRoles(mapped)
+  // If current user is not admin, hide the Administrador role from the selection
+  const filtered = isAdmin ? mapped : mapped.filter((ro) => normalizeRole(ro.name) !== 'admin')
+  setAvailableRoles(filtered)
       })
       .catch((err) => console.error('Failed to load roles', err))
-  }, [])
+  }, [isAdmin])
 
   const filteredUsers = users
     .filter((user) => !isDirector || normalizeRole(user.role ?? user.roleName) !== "admin")
@@ -159,6 +163,15 @@ export function UsersManagement() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
+        if (res.status === 403) {
+          alert('No autorizado para realizar esta acción')
+          return
+        }
+        if (res.status === 409) {
+          const body = await res.json().catch(() => ({}))
+          alert(body.error || 'Operación conflictiva (409)')
+          return
+        }
         if (!res.ok) throw new Error('Error actualizando usuario');
       } else {
         const res = await fetch('/api/admin/users', {
@@ -166,6 +179,10 @@ export function UsersManagement() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
+        if (res.status === 403) {
+          alert('No autorizado para crear este tipo de usuario')
+          return
+        }
         if (!res.ok) throw new Error('Error creando usuario');
       }
       loadUsers();

@@ -40,9 +40,11 @@ export function withAuth(
     // Intentamos verificar el JWT local (generado por generateJWT)
     const payload = verifyJWT(token)
     if (payload) {
-      // normalizar roles permitidos para comparación
-      const allowed = allowedRoles.map((r) => String(r).toLowerCase())
-      const payloadRole = normalizeRole(payload.role)
+      // normalizar roles permitidos para comparación usando normalizeRole
+      const allowed = allowedRoles.map((r) => normalizeRole(String(r)))
+  const payloadRec = payload as unknown as Record<string, unknown> | undefined
+  const payloadRoleRaw = payloadRec && ((payloadRec["role"] ?? payloadRec["roleName"] ?? payloadRec["role_name"]) as string | undefined)
+  const payloadRole = normalizeRole(payloadRoleRaw)
       if (allowed.length > 0 && payloadRole && !allowed.includes(payloadRole)) {
         return res.status(403).json({ error: "No tienes permisos para acceder a esta ruta" })
       }
@@ -63,7 +65,7 @@ export function withAuth(
         const rawRole = (dbRec["roleName"] ?? dbRec["role"] ?? dbRec["role_name"]) as string | undefined
         const role = normalizeRole(rawRole)
 
-        const allowed = allowedRoles.map((r) => String(r).toLowerCase())
+        const allowed = allowedRoles.map((r) => normalizeRole(String(r)))
         if (allowed.length > 0 && role && !allowed.includes(role)) {
           return res.status(403).json({ error: "No tienes permisos para acceder a esta ruta" })
         }

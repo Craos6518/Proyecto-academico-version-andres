@@ -7,8 +7,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     if (req.method === "GET") {
       const { data, error } = await supabaseAdmin.from("enrollments").select("*")
       if (error) throw error
-      const mapped = (data || []).map((row) => {
-        const r = row as unknown as Record<string, unknown>
+      const mapped = (data || []).map((row: Record<string, unknown>) => {
+        const r = row as Record<string, unknown>
         return {
           id: r["id"] as number,
           studentId: (r["student_id"] ?? r["studentId"]) as number,

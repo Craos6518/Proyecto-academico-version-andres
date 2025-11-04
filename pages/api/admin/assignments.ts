@@ -13,8 +13,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       }
       const { data, error } = await query
       if (error) throw error
-      const mapped = (data || []).map((row) => {
-        const r = row as unknown as Record<string, unknown>
+      const mapped = (data || []).map((row: Record<string, unknown>) => {
+        const r = row as Record<string, unknown>
         return {
           id: r["id"] as number,
           subjectId: (r["subject_id"] ?? r["subjectId"]) as number,
