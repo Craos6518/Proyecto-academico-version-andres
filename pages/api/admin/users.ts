@@ -1,8 +1,10 @@
 import type { NextApiRequest, NextApiResponse } from "next"
 import { supabaseAdmin } from "../../../lib/supabase-client"
 import type { Role } from "../../../lib/types"
+import { withAuth } from "../../../lib/middleware/auth"
+import { normalizeRole } from "../../../lib/auth"
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
     if (req.method === "GET") {
       const { data, error } = await supabaseAdmin.from("users").select("*")
@@ -42,7 +44,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (req.method === "POST") {
-  const payload = req.body as Record<string, unknown>
+      const payload = req.body as Record<string, unknown>
+      // authorization: ensure caller cannot create Admin unless they are admin
+  const caller = (req as unknown as { user?: Record<string, unknown> }).user
+  const callerRec = caller as Record<string, unknown> | undefined
+  const rawCallerRole = callerRec && typeof callerRec["role"] === "string" ? String(callerRec["role"]) : callerRec && typeof callerRec["roleName"] === "string" ? String(callerRec["roleName"]) : undefined
+  const callerRole = normalizeRole(rawCallerRole)
+      // Determine intended role name from payload (roleName or roleId)
+      let intendedRoleName: string | undefined = undefined
+      if (payload.roleName) intendedRoleName = String(payload.roleName)
+      if ((payload.roleId !== undefined && payload.roleId !== null) && !intendedRoleName) {
+        // try to resolve role name from roles table
+        try {
+          const { data: roleRec } = await supabaseAdmin.from("roles").select("name").eq("id", payload.roleId).limit(1).maybeSingle()
+          if (roleRec && (roleRec as Record<string, unknown>).name) intendedRoleName = String((roleRec as Record<string, unknown>).name)
+        } catch {
+          // ignore lookup errors; fall back to defensive check below
+        }
+      }
+      if (intendedRoleName && normalizeRole(intendedRoleName) === "admin" && callerRole !== "admin") {
+        return res.status(403).json({ error: "No autorizado para asignar rol Administrador" })
+      }
       // Accept camelCase from client, convert to snake_case for DB
       const dbPayload = {
         id: payload.id ?? undefined,
@@ -84,7 +106,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (req.method === "PUT") {
-  const { id, ...updates } = req.body as Record<string, unknown>
+      const { id, ...updates } = req.body as Record<string, unknown>
+      // authorization: prevent non-admins from assigning Admin role via roleId/roleName
+  const caller = (req as unknown as { user?: Record<string, unknown> }).user
+  const callerRec = caller as Record<string, unknown> | undefined
+  const rawCallerRole = callerRec && typeof callerRec["role"] === "string" ? String(callerRec["role"]) : callerRec && typeof callerRec["roleName"] === "string" ? String(callerRec["roleName"]) : undefined
+  const callerRole = normalizeRole(rawCallerRole)
       if (!id) return res.status(400).json({ error: "Missing id" })
       // convert camelCase updates to snake_case DB columns
   const dbUpdates: Record<string, unknown> = {}
@@ -92,8 +119,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (updatesRec["username"] !== undefined) dbUpdates.username = updatesRec["username"]
   if (updatesRec["firstName"] !== undefined) dbUpdates.first_name = updatesRec["firstName"]
   if (updatesRec["lastName"] !== undefined) dbUpdates.last_name = updatesRec["lastName"]
-  if (updatesRec["roleId"] !== undefined) dbUpdates.role_id = updatesRec["roleId"]
-  if (updatesRec["roleName"] !== undefined) dbUpdates.role_name = updatesRec["roleName"]
+  if (updatesRec["roleId"] !== undefined) {
+    // resolve roleId -> name and validate
+    const newRoleId = updatesRec["roleId"]
+    try {
+      const { data: roleRec } = await supabaseAdmin.from("roles").select("name").eq("id", newRoleId).limit(1).maybeSingle()
+      const newRoleName = roleRec && (roleRec as Record<string, unknown>).name ? String((roleRec as Record<string, unknown>).name) : undefined
+      if (newRoleName && normalizeRole(newRoleName) === "admin" && callerRole !== "admin") {
+        return res.status(403).json({ error: "No autorizado para asignar rol Administrador" })
+      }
+    } catch {
+      // ignore lookup errors and continue defensively
+    }
+    dbUpdates.role_id = updatesRec["roleId"]
+  }
+  if (updatesRec["roleName"] !== undefined) {
+    if (normalizeRole(String(updatesRec["roleName"])) === "admin" && callerRole !== "admin") {
+      return res.status(403).json({ error: "No autorizado para asignar rol Administrador" })
+    }
+    dbUpdates.role_name = updatesRec["roleName"]
+  }
   if (updatesRec["email"] !== undefined) dbUpdates.email = updatesRec["email"]
   if (updatesRec["isActive"] !== undefined) dbUpdates.is_active = updatesRec["isActive"]
   if (updatesRec["password"] !== undefined) dbUpdates.password = updatesRec["password"]
@@ -118,6 +163,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const { id } = req.query
       if (!id) return res.status(400).json({ error: "Missing id" })
       const userId = Number(id)
+      // authorization: only admin can force-delete or delete another admin
+  const caller = (req as unknown as { user?: Record<string, unknown> }).user
+  const callerRec = caller as Record<string, unknown> | undefined
+  const rawCallerRole = callerRec && typeof callerRec["role"] === "string" ? String(callerRec["role"]) : callerRec && typeof callerRec["roleName"] === "string" ? String(callerRec["roleName"]) : undefined
+  const callerRole = normalizeRole(rawCallerRole)
       // check for referencing rows in common tables
   const referencing: Record<string, unknown> = {}
 
@@ -134,6 +184,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (checks[3].data && checks[3].data.length > 0) referencing.subjects = true
 
       const force = req.query.force === "true" || req.query.force === "1"
+
+      // If attempting force-delete, only admin allowed
+      if (force && callerRole !== "admin") {
+        return res.status(403).json({ error: "No autorizado para eliminar forzosamente usuarios" })
+      }
+
+      // Prevent deletion of users with Admin role by non-admin callers
+      try {
+  const { data: targetUser } = await supabaseAdmin.from("users").select("role_name, roleName, role").eq("id", userId).limit(1).maybeSingle()
+  const rawRole = (targetUser && ((targetUser as Record<string, unknown>).role_name ?? (targetUser as Record<string, unknown>).roleName ?? (targetUser as Record<string, unknown>).role)) as string | undefined
+        if (rawRole && normalizeRole(rawRole) === "admin" && callerRole !== "admin") {
+          return res.status(403).json({ error: "No autorizado para eliminar usuarios con rol Administrador" })
+        }
+      } catch {
+        // ignore lookup errors and proceed to existing checks (defensive)
+      }
 
       if (!force && Object.keys(referencing).length > 0) {
         return res.status(409).json({ error: "User has dependent records", references: referencing })
@@ -214,3 +280,5 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(500).json({ error: message || "Error interno" })
   }
 }
+
+export default withAuth(handler, ["admin", "director"])
