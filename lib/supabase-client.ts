@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars */
 import { createClient } from "@supabase/supabase-js"
 
 // Se esperan estas variables de entorno en Vercel/Next
@@ -29,33 +29,103 @@ if (!IS_TEST && !SUPABASE_SERVICE_KEY) {
   )
 }
 
-// Helper: minimal chainable query used in tests
-const makeQuery = () => {
-  const query: any = {}
-  const chainable = ["select", "eq", "order", "limit", "insert", "update", "delete", "in", "or", "single", "maybeSingle"]
-  chainable.forEach((m) => {
-    // ignore args in the stub
-    query[m] = () => query
-  })
-  query.then = (onfulfilled: any, onrejected: any) => Promise.resolve({ data: [], error: null }).then(onfulfilled, onrejected)
-  return query
+// Helper: minimal, in-memory stub for tests. Keeps a tiny dataset that tests rely on.
+const makeTestDb = () => {
+  const testData: Record<string, any[]> = {
+    users: [
+      { id: 1, username: 'admin', email: 'admin@example.com', first_name: 'Admin', last_name: 'User', role_id: 1, role_name: 'Administrador', is_active: true },
+    ],
+    roles: [
+      { id: 1, name: 'Administrador', description: 'Admin role' },
+    ],
+    enrollments: [],
+    grades: [],
+    assignments: [],
+    subjects: [],
+  }
+
+  function matchFilters(row: Record<string, any>, filters: Record<string, any>) {
+    for (const k of Object.keys(filters)) {
+      if (row[k] != filters[k]) return false
+    }
+    return true
+  }
+
+  const from = (table: string) => {
+    const ctx: any = { _table: table, _filters: {}, _limit: undefined }
+
+    ctx.select = (..._args: any[]) => ctx
+    ctx.eq = (col: string, val: any) => { ctx._filters[col] = val; return ctx }
+    ctx.order = (_col: string, _opts?: any) => ctx
+    ctx.limit = (n: number) => { ctx._limit = n; return ctx }
+    ctx.in = (_col: string, vals: any[]) => { ctx._filters['_in'] = { col: _col, vals }; return ctx }
+    ctx.or = (_expr: string) => { ctx._or = _expr; return ctx }
+
+    ctx.maybeSingle = async () => {
+      const rows = (testData[table] || []).filter((r: any) => matchFilters(r, ctx._filters))
+      const row = rows.length > 0 ? rows[0] : null
+      return { data: row, error: null }
+    }
+
+    ctx.single = async () => {
+      const rows = (testData[table] || []).filter((r: any) => matchFilters(r, ctx._filters))
+      const row = rows.length > 0 ? rows[0] : null
+      return { data: row, error: null }
+    }
+
+    ctx.then = (onfulfilled: any, onrejected: any) => {
+      const rows = (testData[table] || []).filter((r: any) => matchFilters(r, ctx._filters))
+      const out = ctx._limit ? rows.slice(0, ctx._limit) : rows
+      return Promise.resolve({ data: out, error: null }).then(onfulfilled, onrejected)
+    }
+
+    ctx.insert = async (payload: any) => {
+      const rec = { ...(payload || {}) }
+      if (!rec.id) {
+        const maxId = (testData[table] || []).reduce((m, r) => Math.max(m, Number(r.id || 0)), 0)
+        rec.id = maxId + 1
+      }
+      testData[table] = testData[table] || []
+      testData[table].push(rec)
+      return { data: [rec], error: null }
+    }
+
+    ctx.update = async (updates: any) => {
+      const rows = (testData[table] || []).filter((r: any) => matchFilters(r, ctx._filters))
+      if (rows.length === 0) return { data: null, error: null }
+      const row = rows[0]
+      Object.assign(row, updates)
+      return { data: row, error: null }
+    }
+
+    ctx.delete = async () => {
+      const rows = (testData[table] || []).filter((r: any) => matchFilters(r, ctx._filters))
+      testData[table] = (testData[table] || []).filter((r: any) => !matchFilters(r, ctx._filters))
+      return { data: rows, error: null }
+    }
+
+    return ctx
+  }
+
+  return { from }
 }
 
+// Test DB instance (only created in test mode)
+const _testDb = IS_TEST ? makeTestDb() : undefined
+
 // Cliente para uso en navegador/cliente (anon key)
-export const supabase = IS_TEST ? makeQuery() : createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+export const supabase = IS_TEST ? (_testDb as any) : createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
 // Cliente con service role key para operaciones administrativas/server-side
 let _supabaseAdmin: any
 if (IS_TEST) {
-  // supabaseAdmin.from(table) signature expected elsewhere; the stub ignores the arg
+  // supabaseAdmin uses the same test DB stub
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const from = (_table: string) => makeQuery()
+  const from = (_table: string) => (_testDb as any).from(_table)
   _supabaseAdmin = {
     from,
-    auth: {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      getUser: async (_token?: string) => ({ data: { user: { id: 1, email: 'test@example.com' } }, error: null }),
-    },
+    // eslint-disable-next-line @typescript-eslint/no-unused_vars
+    auth: { getUser: async (_token?: string) => ({ data: { user: { id: 1, email: 'test@example.com' } }, error: null }) },
   }
 } else {
   _supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
