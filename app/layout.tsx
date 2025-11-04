@@ -6,6 +6,7 @@ import { Analytics } from "@vercel/analytics/next"
 import { Suspense } from "react"
 import "./globals.css"
 import AuthRehydrate from "@/components/auth-rehydrate"
+import { LoadingProvider } from "@/components/loading-context"
 
 // Using Geist package fonts via `geist/font/*`
 
@@ -28,7 +29,9 @@ export default function RootLayout({
       </head> 
       <body className={`font-sans ${GeistSans.variable} ${GeistMono.variable}`}>
         <AuthRehydrate />
-        <Suspense fallback={null}>{children}</Suspense>
+        <LoadingProvider>
+          <Suspense fallback={null}>{children}</Suspense>
+        </LoadingProvider>
         {process.env.NODE_ENV === 'production' ? <Analytics /> : null}
       </body>
     </html>
