@@ -1,7 +1,9 @@
 import type { NextApiRequest, NextApiResponse } from "next"
 import { supabaseAdmin } from "../../../lib/supabase-client"
+import { withAuth } from "../../../lib/middleware/auth"
+import { normalizeRole } from "../../../lib/auth"
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
     if (req.method === "GET") {
       const { subjectId } = req.query
@@ -11,8 +13,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
       const { data, error } = await query
       if (error) throw error
-      const mapped = (data || []).map((row) => {
-        const r = row as unknown as Record<string, unknown>
+      const mapped = (data || []).map((row: Record<string, unknown>) => {
+        const r = row as Record<string, unknown>
         return {
           id: r["id"] as number,
           subjectId: (r["subject_id"] ?? r["subjectId"]) as number,
@@ -28,7 +30,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (req.method === "POST") {
-  const payload = req.body as Record<string, unknown>
+      const payload = req.body as Record<string, unknown>
+      // If caller is a teacher, force teacher_id to caller's id to avoid creating assignments for other teachers
+      const caller = (req as unknown as { user?: Record<string, unknown> }).user
+      const callerRec = caller as Record<string, unknown> | undefined
+      const rawCallerRole = callerRec && typeof callerRec["role"] === "string" ? String(callerRec["role"]) : callerRec && typeof callerRec["roleName"] === "string" ? String(callerRec["roleName"]) : undefined
+      const callerRole = normalizeRole(rawCallerRole)
+      const callerId = callerRec && (callerRec["id"] ?? callerRec["user_id"] ?? callerRec["uid"]) as string | number | undefined
+      if (callerRole === "teacher") {
+        // ensure teacher can only create assignments for themselves
+        payload.teacherId = Number(callerId ?? payload.teacherId)
+      }
       const dbPayload = {
         ...(payload.id ? { id: payload.id } : {}),
         subject_id: payload.subjectId,
@@ -68,7 +80,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (req.method === "PUT") {
-  const { id, ...updates } = req.body as Record<string, unknown>
+      const { id, ...updates } = req.body as Record<string, unknown>
+      // If caller is teacher, disallow changing teacher_id to another teacher
+      const caller = (req as unknown as { user?: Record<string, unknown> }).user
+      const callerRec = caller as Record<string, unknown> | undefined
+      const rawCallerRole = callerRec && typeof callerRec["role"] === "string" ? String(callerRec["role"]) : callerRec && typeof callerRec["roleName"] === "string" ? String(callerRec["roleName"]) : undefined
+      const callerRole = normalizeRole(rawCallerRole)
+      const callerId = callerRec && (callerRec["id"] ?? callerRec["user_id"] ?? callerRec["uid"]) as string | number | undefined
+      const updatesRecLocal = updates as Record<string, unknown>
+      if (callerRole === "teacher" && updatesRecLocal["teacherId"] !== undefined && Number(updatesRecLocal["teacherId"]) !== Number(callerId)) {
+        return res.status(403).json({ error: "No autorizado para reasignar tareas a otro profesor" })
+      }
       if (!id) return res.status(400).json({ error: "Missing id" })
   const dbUpdates: Record<string, unknown> = {}
   const updatesRec = updates as Record<string, unknown>
@@ -99,6 +121,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (req.method === "DELETE") {
       const { id } = req.query
       if (!id) return res.status(400).json({ error: "Missing id" })
+      // If caller is teacher, ensure they can only delete their own assignments
+      const caller = (req as unknown as { user?: Record<string, unknown> }).user
+      const callerRec = caller as Record<string, unknown> | undefined
+      const rawCallerRole = callerRec && typeof callerRec["role"] === "string" ? String(callerRec["role"]) : callerRec && typeof callerRec["roleName"] === "string" ? String(callerRec["roleName"]) : undefined
+      const callerRole = normalizeRole(rawCallerRole)
+      const callerId = callerRec && (callerRec["id"] ?? callerRec["user_id"] ?? callerRec["uid"]) as string | number | undefined
+      if (callerRole === "teacher") {
+        // verify assignment belongs to caller
+        const { data: ass } = await supabaseAdmin.from("assignments").select("teacher_id").eq("id", Number(id)).limit(1).maybeSingle()
+        const ownerId = ass && (ass as Record<string, unknown>)["teacher_id"]
+        if (ownerId === undefined || Number(ownerId) !== Number(callerId)) {
+          return res.status(403).json({ error: "No autorizado para eliminar esta tarea" })
+        }
+      }
       const { error } = await supabaseAdmin.from("assignments").delete().eq("id", Number(id))
       if (error) throw error
       return res.status(204).end()
@@ -111,3 +147,5 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(500).json({ error: message || "Error interno" })
   }
 }
+
+export default withAuth(handler, ["admin", "teacher"])

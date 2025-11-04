@@ -1,8 +1,47 @@
 import type { NextApiRequest, NextApiResponse } from "next"
 import { supabaseAdmin } from "../../../lib/supabase-client"
 import type { Role } from "../../../lib/types"
+import { withAuth } from "../../../lib/middleware/auth"
+import { normalizeRole } from "../../../lib/auth"
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+async function handler(req: NextApiRequest, res: NextApiResponse) {
+
+  // Helper: count admins in users table using role_name/role fields and roles table
+  async function countAdmins(): Promise<number> {
+    try {
+      // fetch roles to resolve admin role ids
+      const { data: rolesData } = await supabaseAdmin.from("roles").select("id,name")
+      const adminRoleIds: number[] = []
+      ;((rolesData || []) as Array<Record<string, unknown>>).forEach((r) => {
+        const name = String(r["name"] ?? "")
+        if (normalizeRole(name) === "admin") {
+          const id = Number(r["id"] ?? r["role_id"] ?? r["roleId"])
+          if (!Number.isNaN(id)) adminRoleIds.push(id)
+        }
+      })
+
+      // fetch users with potentially admin roles
+      const { data: usersData } = await supabaseAdmin.from("users").select("id,role_id,role_name,role,roleName")
+      let count = 0
+      ;((usersData || []) as Array<Record<string, unknown>>).forEach((u) => {
+        const rawRole = (u["role_name"] ?? u["roleName"] ?? u["role"]) as string | undefined
+        const roleId = Number(u["role_id"] ?? u["roleId"] ?? 0)
+        if (roleId && adminRoleIds.includes(roleId)) {
+          count++
+          return
+        }
+        if (rawRole && normalizeRole(rawRole) === "admin") {
+          count++
+        }
+      })
+      return count
+    } catch (e) {
+      console.error("countAdmins error", e)
+      // On error be conservative and return a high number to avoid blocking operations.
+      return 9999
+    }
+  }
+
   try {
     if (req.method === "GET") {
       const { data, error } = await supabaseAdmin.from("users").select("*")
@@ -22,8 +61,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   })
 
-      const mapped = (data || []).map((row) => {
-        const r = row as unknown as Record<string, unknown>
+      const mapped = (data || []).map((row: Record<string, unknown>) => {
+        const r = row as Record<string, unknown>
         const roleId = (r["role_id"] ?? r["roleId"]) as number | null | undefined
         const roleNameFromRow = (r["role_name"] ?? r["roleName"] ?? r["role"]) as string | undefined
         const roleName = roleNameFromRow ?? (roleId && rolesMap[roleId] ? rolesMap[roleId]!.name : "")
@@ -42,7 +81,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (req.method === "POST") {
-  const payload = req.body as Record<string, unknown>
+      const payload = req.body as Record<string, unknown>
+      // authorization: ensure caller cannot create Admin unless they are admin
+  const caller = (req as unknown as { user?: Record<string, unknown> }).user
+  const callerRec = caller as Record<string, unknown> | undefined
+  const rawCallerRole = callerRec && typeof callerRec["role"] === "string" ? String(callerRec["role"]) : callerRec && typeof callerRec["roleName"] === "string" ? String(callerRec["roleName"]) : undefined
+  const callerRole = normalizeRole(rawCallerRole)
+      // Determine intended role name from payload (roleName or roleId)
+      let intendedRoleName: string | undefined = undefined
+      if (payload.roleName) intendedRoleName = String(payload.roleName)
+      if ((payload.roleId !== undefined && payload.roleId !== null) && !intendedRoleName) {
+        // try to resolve role name from roles table
+        try {
+          const { data: roleRec } = await supabaseAdmin.from("roles").select("name").eq("id", payload.roleId).limit(1).maybeSingle()
+          if (roleRec && (roleRec as Record<string, unknown>).name) intendedRoleName = String((roleRec as Record<string, unknown>).name)
+        } catch {
+          // ignore lookup errors; fall back to defensive check below
+        }
+      }
+      if (intendedRoleName && normalizeRole(intendedRoleName) === "admin" && callerRole !== "admin") {
+        return res.status(403).json({ error: "No autorizado para asignar rol Administrador" })
+      }
       // Accept camelCase from client, convert to snake_case for DB
       const dbPayload = {
         id: payload.id ?? undefined,
@@ -84,7 +143,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (req.method === "PUT") {
-  const { id, ...updates } = req.body as Record<string, unknown>
+      const { id, ...updates } = req.body as Record<string, unknown>
+      // authorization: prevent non-admins from assigning Admin role via roleId/roleName
+  const caller = (req as unknown as { user?: Record<string, unknown> }).user
+  const callerRec = caller as Record<string, unknown> | undefined
+  const rawCallerRole = callerRec && typeof callerRec["role"] === "string" ? String(callerRec["role"]) : callerRec && typeof callerRec["roleName"] === "string" ? String(callerRec["roleName"]) : undefined
+  const callerRole = normalizeRole(rawCallerRole)
       if (!id) return res.status(400).json({ error: "Missing id" })
       // convert camelCase updates to snake_case DB columns
   const dbUpdates: Record<string, unknown> = {}
@@ -92,11 +156,67 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (updatesRec["username"] !== undefined) dbUpdates.username = updatesRec["username"]
   if (updatesRec["firstName"] !== undefined) dbUpdates.first_name = updatesRec["firstName"]
   if (updatesRec["lastName"] !== undefined) dbUpdates.last_name = updatesRec["lastName"]
-  if (updatesRec["roleId"] !== undefined) dbUpdates.role_id = updatesRec["roleId"]
-  if (updatesRec["roleName"] !== undefined) dbUpdates.role_name = updatesRec["roleName"]
+  if (updatesRec["roleId"] !== undefined) {
+    // resolve roleId -> name and validate
+    const newRoleId = updatesRec["roleId"]
+    try {
+      const { data: roleRec } = await supabaseAdmin.from("roles").select("name").eq("id", newRoleId).limit(1).maybeSingle()
+      const newRoleName = roleRec && (roleRec as Record<string, unknown>).name ? String((roleRec as Record<string, unknown>).name) : undefined
+      if (newRoleName && normalizeRole(newRoleName) === "admin" && callerRole !== "admin") {
+        return res.status(403).json({ error: "No autorizado para asignar rol Administrador" })
+      }
+    } catch {
+      // ignore lookup errors and continue defensively
+    }
+    dbUpdates.role_id = updatesRec["roleId"]
+  }
+  if (updatesRec["roleName"] !== undefined) {
+    if (normalizeRole(String(updatesRec["roleName"])) === "admin" && callerRole !== "admin") {
+      return res.status(403).json({ error: "No autorizado para asignar rol Administrador" })
+    }
+    dbUpdates.role_name = updatesRec["roleName"]
+  }
   if (updatesRec["email"] !== undefined) dbUpdates.email = updatesRec["email"]
   if (updatesRec["isActive"] !== undefined) dbUpdates.is_active = updatesRec["isActive"]
   if (updatesRec["password"] !== undefined) dbUpdates.password = updatesRec["password"]
+
+      // LAST-ADMIN SAFEGUARD: prevent removing Admin role if this is the last admin
+      try {
+        const { data: existingUser } = await supabaseAdmin.from("users").select("id,role_id,role_name,role,roleName").eq("id", id).limit(1).maybeSingle()
+        const rawCurrentRole = existingUser && ((existingUser as Record<string, unknown>).role_name ?? (existingUser as Record<string, unknown>).roleName ?? (existingUser as Record<string, unknown>).role) as string | undefined
+        const currentIsAdmin = rawCurrentRole ? normalizeRole(rawCurrentRole) === "admin" : false
+
+        // determine what the new role would be after update
+        let newRoleName: string | undefined = undefined
+        if (dbUpdates.role_name) newRoleName = String(dbUpdates.role_name)
+        if ((dbUpdates.role_id !== undefined && dbUpdates.role_id !== null) && !newRoleName) {
+          try {
+            const { data: roleRec } = await supabaseAdmin.from("roles").select("name").eq("id", dbUpdates.role_id).limit(1).maybeSingle()
+            if (roleRec && (roleRec as Record<string, unknown>).name) newRoleName = String((roleRec as Record<string, unknown>).name)
+          } catch {
+            // ignore
+          }
+        }
+        const wouldRemainAdmin = newRoleName ? normalizeRole(newRoleName) === "admin" : currentIsAdmin
+
+        // get caller id to detect self-demote
+        const callerIdRaw = callerRec && (callerRec["id"] ?? callerRec["user_id"] ?? callerRec["sub"] ?? callerRec["uid"])
+        const callerId = callerIdRaw ? Number(callerIdRaw) : undefined
+
+        if (currentIsAdmin && !wouldRemainAdmin) {
+          const adminsCount = await countAdmins()
+          if (adminsCount <= 1) {
+            return res.status(409).json({ error: "No es posible eliminar o desasignar el rol Administrador: este usuario es el último administrador" })
+          }
+          // additionally prevent self-demote even if there are other admins? allow if >1 but avoid accidental self-demote
+          if (callerId !== undefined && callerId === Number(id)) {
+            return res.status(403).json({ error: "No puedes desasignarte el rol Administrador desde esta acción" })
+          }
+        }
+      } catch (e) {
+        // if safeguard check fails unexpectedly, log and continue defensively (do not block update unless we can confirm last-admin)
+        console.error("last-admin safeguard check failed:", e)
+      }
 
       const { data, error } = await supabaseAdmin.from("users").update(dbUpdates).eq("id", id).select().limit(1).single()
       if (error) throw error
@@ -118,6 +238,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const { id } = req.query
       if (!id) return res.status(400).json({ error: "Missing id" })
       const userId = Number(id)
+      // authorization: only admin can force-delete or delete another admin
+  const caller = (req as unknown as { user?: Record<string, unknown> }).user
+  const callerRec = caller as Record<string, unknown> | undefined
+  const rawCallerRole = callerRec && typeof callerRec["role"] === "string" ? String(callerRec["role"]) : callerRec && typeof callerRec["roleName"] === "string" ? String(callerRec["roleName"]) : undefined
+  const callerRole = normalizeRole(rawCallerRole)
       // check for referencing rows in common tables
   const referencing: Record<string, unknown> = {}
 
@@ -135,6 +260,30 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       const force = req.query.force === "true" || req.query.force === "1"
 
+      // If attempting force-delete, only admin allowed
+      if (force && callerRole !== "admin") {
+        return res.status(403).json({ error: "No autorizado para eliminar forzosamente usuarios" })
+      }
+
+      // Prevent deletion of users with Admin role by non-admin callers, and prevent deleting the last admin
+      try {
+  const { data: targetUser } = await supabaseAdmin.from("users").select("id,role_id,role_name,role,roleName").eq("id", userId).limit(1).maybeSingle()
+  const rawRole = (targetUser && ((targetUser as Record<string, unknown>).role_name ?? (targetUser as Record<string, unknown>).roleName ?? (targetUser as Record<string, unknown>).role)) as string | undefined
+        if (rawRole && normalizeRole(rawRole) === "admin") {
+          if (callerRole !== "admin") {
+            return res.status(403).json({ error: "No autorizado para eliminar usuarios con rol Administrador" })
+          }
+          const adminsCount = await countAdmins()
+          if (adminsCount <= 1) {
+            return res.status(409).json({ error: "No es posible eliminar este Administrador: es el último usuario con rol Administrador" })
+          }
+        }
+      } catch (e) {
+        console.error("delete admin check error", e)
+        // if we can't determine role safely, err on the side of safety and prevent deletion when caller isn't admin
+        if (callerRole !== "admin") return res.status(403).json({ error: "No autorizado para eliminar usuarios con rol Administrador" })
+      }
+
       if (!force && Object.keys(referencing).length > 0) {
         return res.status(409).json({ error: "User has dependent records", references: referencing })
       }
@@ -149,10 +298,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           supabaseAdmin.from("subjects").select("id").eq("teacher_id", userId),
         ])
 
-  const enrollIds = (enrollResIds.data || []).map((r) => (r as unknown as Record<string, unknown>)["id"] as number)
-  const gradesIds = (gradesResIds.data || []).map((r) => (r as unknown as Record<string, unknown>)["id"] as number)
-  const assignmentsIds = (assignmentsResIds.data || []).map((r) => (r as unknown as Record<string, unknown>)["id"] as number)
-  const subjectsIds = (subjectsResIds.data || []).map((r) => (r as unknown as Record<string, unknown>)["id"] as number)
+  const enrollIds = (enrollResIds.data || []).map((r: Record<string, unknown>) => (r as Record<string, unknown>)["id"] as number)
+  const gradesIds = (gradesResIds.data || []).map((r: Record<string, unknown>) => (r as Record<string, unknown>)["id"] as number)
+  const assignmentsIds = (assignmentsResIds.data || []).map((r: Record<string, unknown>) => (r as Record<string, unknown>)["id"] as number)
+  const subjectsIds = (subjectsResIds.data || []).map((r: Record<string, unknown>) => (r as Record<string, unknown>)["id"] as number)
 
         const deletedCounts: Record<string, number> = {
           enrollments: 0,
@@ -172,7 +321,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           if (!ids || ids.length === 0) return { count: 0, ids: [] }
           const { data, error } = await supabaseAdmin.from(table).delete().in("id", ids).select("id")
           if (error) throw error
-          return { count: (data || []).length, ids: (data || []).map((d) => (d as unknown as Record<string, unknown>)["id"] as number) }
+          return { count: (data || []).length, ids: (data || []).map((d: Record<string, unknown>) => (d as Record<string, unknown>)["id"] as number) }
         }
 
         // perform deletions in order to respect FK relationships
@@ -214,3 +363,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(500).json({ error: message || "Error interno" })
   }
 }
+
+export default withAuth(handler, ["admin", "director"])
+
+// Export the raw handler (unwrapped) for unit tests to call directly
+export { handler as rawUsersHandler }
