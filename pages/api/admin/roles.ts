@@ -17,4 +17,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   }
 }
 
-export default withAuth(handler, ["admin"])
+// Permitimos también a los directors leer la lista de roles para que, por ejemplo,
+// la interfaz de creación/edición de usuarios pueda mostrar el selector de roles
+// cuando el usuario actual sea Director. La API que crea/actualiza usuarios ya
+// valida que sólo los Admin puedan asignar el rol Administrador.
+export default withAuth(handler, ["admin", "director"])
