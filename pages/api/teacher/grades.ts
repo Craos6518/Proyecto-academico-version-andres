@@ -38,7 +38,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         graded_at: payload.gradedAt ?? payload.graded_at ?? null,
       }
 
-      let { data, error } = await supabaseAdmin.from("grades").insert(dbPayload).select().limit(1).single()
+      // Remove undefined/null keys (and crucially never send an explicit `id` field)
+      const cleanedPayload: Record<string, unknown> = {}
+      Object.entries(dbPayload).forEach(([k, v]) => {
+        if (k === "id") return // never forward id
+        if (v === undefined) return
+        // allow explicit null for comments, but for other fields avoid sending null which can insert explicit NULL into leading PK
+        if (v === null && k !== "comments") return
+        cleanedPayload[k] = v
+      })
+
+      // Defensive log for debugging insert payloads (server-side only)
+      console.debug("teacher/grades insert payload:", cleanedPayload)
+
+      let { data, error } = await supabaseAdmin.from("grades").insert(cleanedPayload).select().limit(1).single()
       // handle possible sequence mismatch where nextval returns an id that already exists
       if (error && (error as any).code === "23505") {
         console.error("teacher/grades insert conflict, attempting one retry to repair sequence", error)
