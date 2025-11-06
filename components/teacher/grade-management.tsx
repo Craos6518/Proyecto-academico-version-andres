@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -48,6 +48,7 @@ export function GradeManagement({ teacherId }: GradeManagementProps) {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingGrade, setEditingGrade] = useState<Grade | null>(null)
   const [deleteGradeId, setDeleteGradeId] = useState<number | null>(null)
+  const [currentStudentIndex, setCurrentStudentIndex] = useState<number>(0)
   const [duplicateError, setDuplicateError] = useState<string>("")
   const [formData, setFormData] = useState({
     studentId: 0,
@@ -140,8 +141,8 @@ export function GradeManagement({ teacherId }: GradeManagementProps) {
     }
   }, [selectedSubjectId])
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleSubmit = (e?: React.FormEvent, keepOpen = false) => {
+    if (e && typeof e.preventDefault === "function") e.preventDefault()
 
     ;(async () => {
       try {
@@ -152,7 +153,7 @@ export function GradeManagement({ teacherId }: GradeManagementProps) {
             body: JSON.stringify({ id: editingGrade.id, score: formData.score, comments: formData.comments }),
           })
           if (!res.ok) throw new Error("Error updating grade")
-        } else {
+  } else {
           const existingGrade = grades.find(
             (g) => g.studentId === formData.studentId && g.assignmentId === formData.assignmentId,
           )
@@ -186,17 +187,42 @@ export function GradeManagement({ teacherId }: GradeManagementProps) {
         const gradesRes = await fetch(`/api/teacher/grades?subjectId=${selectedSubjectId}`)
         if (!gradesRes.ok) throw new Error("Error fetching grades")
         const gradesData: Grade[] = await gradesRes.json()
-          setGrades(
-            gradesData.map((g) => {
-              const gr = g as unknown as Record<string, unknown>
-              const studentId = Number(gr["studentId"] ?? gr["student_id"] ?? 0)
-              const assignmentId = Number(gr["assignmentId"] ?? gr["assignment_id"] ?? 0)
-              return { ...(g as object), studentId, assignmentId } as Grade
-            })
-          )
+        setGrades(
+          gradesData.map((g) => {
+            const gr = g as unknown as Record<string, unknown>
+            const studentId = Number(gr["studentId"] ?? gr["student_id"] ?? 0)
+            const assignmentId = Number(gr["assignmentId"] ?? gr["assignment_id"] ?? 0)
+            return { ...(g as object), studentId, assignmentId } as Grade
+          }),
+        )
 
-        setIsDialogOpen(false)
-        resetForm()
+        if (!keepOpen || editingGrade) {
+          setIsDialogOpen(false)
+          resetForm()
+        } else {
+          // Avanzar al siguiente estudiante en modo ciclo usando la lista actualizada de calificaciones
+          // gradesData contiene la lista actualizada de calificaciones recibida del servidor
+          const newEligible = students.filter((s) => !gradesData.some((g) => g.studentId === s.id && g.assignmentId === formData.assignmentId))
+          const total = newEligible.length
+          if (total > 0) {
+            // Si el estudiante actual fue removido de la lista (porque ya fue calificado), mantenemos el índice
+            // pero aseguramos que esté dentro del nuevo rango
+            const baseIndex = currentStudentIndex % total
+            const next = (baseIndex + 1) % total
+            setCurrentStudentIndex(next)
+            setFormData({
+              studentId: newEligible[next]?.id || 0,
+              assignmentId: formData.assignmentId,
+              score: 0,
+              comments: "",
+            })
+            setDuplicateError("")
+            // keep dialog abierto
+          } else {
+            setIsDialogOpen(false)
+            resetForm()
+          }
+        }
       } catch (err) {
         console.error(err)
         alert("Error al guardar la calificación")
@@ -235,12 +261,26 @@ export function GradeManagement({ teacherId }: GradeManagementProps) {
     setEditingGrade(null)
     setDuplicateError("")
     setFormData({
-      studentId: students[0]?.id || 0,
+      studentId: eligibleStudents[currentStudentIndex]?.id || students[0]?.id || 0,
       assignmentId: assignments[0]?.id || 0,
       score: 0,
       comments: "",
     })
   }
+
+  // Lista de estudiantes elegibles para la evaluación seleccionada (sin calificación para esa evaluación)
+  const eligibleStudents = useMemo(() => {
+    const aid = formData.assignmentId
+    if (!aid) return students
+    return students.filter((s) => !grades.some((g) => g.studentId === s.id && g.assignmentId === aid))
+  }, [students, grades, formData.assignmentId])
+
+  // Mantener formData.studentId sincronizado con eligibleStudents cuando cambia el assignment o la lista elegible
+  useEffect(() => {
+    if (!isDialogOpen || editingGrade) return
+    const sid = eligibleStudents[currentStudentIndex]?.id || 0
+    setFormData((prev) => ({ ...prev, studentId: sid }))
+  }, [eligibleStudents, currentStudentIndex, isDialogOpen, editingGrade])
 
   const getStudentName = (studentId: number) => {
     const student = students.find((s) => s.id === studentId)
@@ -309,7 +349,19 @@ export function GradeManagement({ teacherId }: GradeManagementProps) {
           open={isDialogOpen}
           onOpenChange={(open) => {
             setIsDialogOpen(open)
-            if (!open) resetForm()
+            if (open) {
+              // iniciar ciclo desde el primer estudiante al abrir nuevo diálogo
+              setEditingGrade(null)
+              setCurrentStudentIndex(0)
+              setFormData({
+                studentId: students[0]?.id || 0,
+                assignmentId: assignments[0]?.id || 0,
+                score: 0,
+                comments: "",
+              })
+            } else {
+              resetForm()
+            }
           }}
         >
           <DialogTrigger asChild>
@@ -336,25 +388,18 @@ export function GradeManagement({ teacherId }: GradeManagementProps) {
 
                 <div className="space-y-2">
                   <Label htmlFor="student">Estudiante</Label>
-                  <Select
-                    value={formData.studentId.toString()}
-                    onValueChange={(value) => {
-                      setFormData({ ...formData, studentId: Number.parseInt(value) })
-                      setDuplicateError("")
-                    }}
-                    disabled={!!editingGrade}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecciona un estudiante" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {students.map((student) => (
-                        <SelectItem key={student.id} value={student.id.toString()}>
-                          {student.firstName} {student.lastName}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  {(!editingGrade && eligibleStudents.length > 0) || editingGrade ? (
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="font-medium">
+                        {getStudentName(editingGrade ? editingGrade.studentId : eligibleStudents[currentStudentIndex]?.id || 0)}
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        {!editingGrade ? `${currentStudentIndex + 1}/${eligibleStudents.length}` : ""}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-muted-foreground">No hay estudiantes sin calificación para esta evaluación</div>
+                  )}
                 </div>
 
                 <div className="space-y-2">
@@ -362,7 +407,11 @@ export function GradeManagement({ teacherId }: GradeManagementProps) {
                   <Select
                     value={formData.assignmentId.toString()}
                     onValueChange={(value) => {
-                      setFormData({ ...formData, assignmentId: Number.parseInt(value) })
+                      const newAid = Number.parseInt(value)
+                      // calcular estudiantes elegibles para la nueva evaluación
+                      const newEligible = students.filter((s) => !grades.some((g) => g.studentId === s.id && g.assignmentId === newAid))
+                      setCurrentStudentIndex(0)
+                      setFormData({ ...formData, assignmentId: newAid, studentId: newEligible[0]?.id || 0 })
                       setDuplicateError("")
                     }}
                     disabled={!!editingGrade}
@@ -410,7 +459,12 @@ export function GradeManagement({ teacherId }: GradeManagementProps) {
                 </div>
               </div>
               <DialogFooter>
-                <Button type="submit">{editingGrade ? "Guardar Cambios" : "Registrar Calificación"}</Button>
+                {!editingGrade && (
+                  <Button type="button" variant="secondary" onClick={() => handleSubmit(undefined, true)} disabled={eligibleStudents.length === 0}>
+                    Seguir
+                  </Button>
+                )}
+                <Button type="submit" disabled={!editingGrade && eligibleStudents.length === 0}>{editingGrade ? "Guardar Cambios" : "Registrar Calificación"}</Button>
               </DialogFooter>
             </form>
           </DialogContent>
