@@ -7,8 +7,6 @@
 -- 3) set default nextval(...) on the id column
 -- 4) set sequence ownership to table.id
 
-\set ON_ERROR_STOP on
-
 DO $$
 DECLARE
   rec RECORD;
@@ -25,19 +23,39 @@ BEGIN
   LOOP
     tbl := rec.table_name;
     seqname := tbl || '_id_seq';
+    -- skip if the table doesn't have an 'id' column
+    IF NOT EXISTS (
+      SELECT 1 FROM information_schema.columns c
+      WHERE c.table_schema = 'public' AND c.table_name = tbl AND c.column_name = 'id'
+    ) THEN
+      RAISE NOTICE 'Skipping table % because it has no id column', tbl;
+      CONTINUE;
+    END IF;
     -- create sequence if missing
     EXECUTE format('CREATE SEQUENCE IF NOT EXISTS %I', seqname);
     -- compute max id
     EXECUTE format('SELECT COALESCE(MAX(id),0) FROM %I', tbl) INTO maxid;
     -- set sequence value to max(id)+1 so nextval returns a safe new id
     EXECUTE format('SELECT setval(%L, %s, false)', seqname, (maxid + 1)::text);
+    RAISE NOTICE 'Table %: max(id) = %, ensured sequence % start = %', tbl, maxid, seqname, (maxid + 1)::text;
     -- set default on table.id if not already set
+    -- Use information_schema to avoid casting issues with ::regclass when table names
+    -- contain unusual characters or when the runner does not allow psql metacommands.
     IF NOT EXISTS (
-      SELECT 1 FROM pg_attrdef d JOIN pg_attribute a ON a.attrelid = d.adrelid AND a.adnum = a.attnum
-      WHERE a.attrelid = (tbl || '::regclass')::regclass AND a.attname = 'id'
-      AND pg_get_expr(d.adbin, d.adrelid) LIKE ('nextval(%' || seqname || '%')
+      -- check whether the id column already has a default that references this sequence
+      SELECT 1
+      FROM information_schema.columns c
+      WHERE c.table_schema = 'public'
+        AND c.table_name = tbl
+        AND c.column_name = 'id'
+        AND c.column_default IS NOT NULL
+        AND c.column_default LIKE ('%' || seqname || '%')
     ) THEN
+      RAISE NOTICE 'Setting default for %.id -> nextval(%).', tbl, seqname;
       EXECUTE format('ALTER TABLE %I ALTER COLUMN id SET DEFAULT nextval(%L)', tbl, seqname);
+      RAISE NOTICE 'Default set for %.id', tbl;
+    ELSE
+      RAISE NOTICE 'Default already present for %.id, skipping', tbl;
     END IF;
     -- ensure sequence ownership
     EXECUTE format('ALTER SEQUENCE %I OWNED BY %I.id', seqname, tbl);

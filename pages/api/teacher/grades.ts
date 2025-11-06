@@ -52,32 +52,55 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       console.debug("teacher/grades insert payload:", cleanedPayload)
 
       let { data, error } = await supabaseAdmin.from("grades").insert(cleanedPayload).select().limit(1).single()
-      // handle possible sequence mismatch where nextval returns an id that already exists
+      // handle unique-violation (23505). This can mean two different things:
+      // - a primary-key collision (sequence out of sync) -> try to repair sequence by inserting with a safe id
+      // - a logical duplicate (same student_id+assignment_id+subject_id) -> should return 409 (conflict)
       if (error && (error as any).code === "23505") {
-        console.error("teacher/grades insert conflict, attempting one retry to repair sequence", error)
-        try {
-          const { data: maxRow, error: maxErr } = await supabaseAdmin
-            .from("grades")
-            .select("id")
-            .order("id", { ascending: false })
-            .limit(1)
-            .maybeSingle()
-          const maybeId = maxRow ? (maxRow as Record<string, unknown>)?.id : undefined
-          const nextId = maybeId !== undefined && maybeId !== null ? Number(maybeId) + 1 : 1
-          // try inserting with explicit id = nextId
-          const { data: data2, error: error2 } = await supabaseAdmin
-            .from("grades")
-            .insert({ ...dbPayload, id: nextId })
-            .select()
-            .limit(1)
-            .single()
-          if (error2) throw error2
-          data = data2
-          error = null
-        } catch (err2) {
-          // if retry fails, propagate original or retry error
-          console.error("teacher/grades retry insert failed", err2)
-          throw err2
+        const errObj = error as any
+        const detail = String(errObj?.detail ?? errObj?.message ?? "")
+        const constraint = String(errObj?.constraint ?? "")
+
+        // detect if the conflict is due to the business-unique (student/assignment/subject)
+        const isDuplicateGrade = /student_id|assignment_id|subject_id|studentId|assignmentId|subjectId/i.test(detail) || /grades_student_assignment_subject_key|grades_unique/i.test(constraint)
+
+        if (isDuplicateGrade) {
+          // The client attempted to create a grade that already exists. Return 409 so the UI can handle it.
+          console.warn("teacher/grades duplicate detected, returning 409:", { detail, constraint })
+          return res.status(409).json({ error: "Grade already exists for this student and assignment" })
+        }
+
+        // Otherwise assume it's a PK/sequence collision and attempt one repair retry
+        const isPKConflict = /pkey|primary key|id\)/i.test(constraint) || /id\)/i.test(detail) || /primary key/i.test(detail)
+        if (isPKConflict) {
+          console.error("teacher/grades insert conflict (possible pk), attempting one retry to repair sequence", { detail, constraint })
+          try {
+            const { data: maxRow, error: maxErr } = await supabaseAdmin
+              .from("grades")
+              .select("id")
+              .order("id", { ascending: false })
+              .limit(1)
+              .maybeSingle()
+            const maybeId = maxRow ? (maxRow as Record<string, unknown>)?.id : undefined
+            const nextId = maybeId !== undefined && maybeId !== null ? Number(maybeId) + 1 : 1
+            // try inserting with explicit id = nextId
+            const { data: data2, error: error2 } = await supabaseAdmin
+              .from("grades")
+              .insert({ ...dbPayload, id: nextId })
+              .select()
+              .limit(1)
+              .single()
+            if (error2) throw error2
+            data = data2
+            error = null
+          } catch (err2) {
+            // if retry fails, propagate original or retry error
+            console.error("teacher/grades retry insert failed", err2)
+            throw err2
+          }
+        } else {
+          // Unknown unique violation target; propagate original error for now
+          console.error("teacher/grades unique violation but not identified as PK or duplicate-grade:", { detail, constraint })
+          throw error
         }
       }
       if (error) throw error
