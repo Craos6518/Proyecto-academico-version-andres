@@ -1,8 +1,9 @@
 import type { NextApiRequest, NextApiResponse } from "next"
 import { supabaseAdmin } from "../../../lib/supabase-client"
 import type { User } from "../../../lib/types"
+import { withAuth } from "../../../lib/middleware/auth"
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
     if (req.method === "GET") {
       const { data, error } = await supabaseAdmin.from("subjects").select("*")
@@ -10,10 +11,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       // fetch users to map teacher names when missing
   const { data: usersData } = await supabaseAdmin.from("users").select("id, first_name, last_name, firstName, lastName")
   const usersMap: Record<number, User | undefined> = {}
-  ;(usersData || []).forEach((u) => (usersMap[(u as unknown as User).id] = u as unknown as User))
+  ;(usersData || []).forEach((u: Record<string, unknown>) => (usersMap[(u as unknown as User).id] = u as unknown as User))
 
-      const mapped = (data || []).map((row) => {
-        const r = row as unknown as Record<string, unknown>
+      const mapped = (data || []).map((row: Record<string, unknown>) => {
+        const r = row as Record<string, unknown>
         const teacherId = (r["teacher_id"] ?? r["teacherId"]) as number | null | undefined
         const teacherFromRow = (r["teacher_name"] ?? r["teacherName"]) as string | undefined
         const teacherUser = teacherId ? usersMap[teacherId] : null
@@ -126,3 +127,5 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(500).json({ error: message || "Error interno" })
   }
 }
+
+export default withAuth(handler, ["admin", "director"])

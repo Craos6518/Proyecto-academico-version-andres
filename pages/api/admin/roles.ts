@@ -1,7 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from "next"
 import { supabaseAdmin } from "../../../lib/supabase-client"
+import { withAuth } from "../../../lib/middleware/auth"
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
     if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" })
 
@@ -15,3 +16,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(500).json({ error: message || "Error interno" })
   }
 }
+
+// Permitimos también a los directors leer la lista de roles para que, por ejemplo,
+// la interfaz de creación/edición de usuarios pueda mostrar el selector de roles
+// cuando el usuario actual sea Director. La API que crea/actualiza usuarios ya
+// valida que sólo los Admin puedan asignar el rol Administrador.
+export default withAuth(handler, ["admin", "director"])

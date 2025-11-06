@@ -81,7 +81,13 @@ export const authService = {
 
   hasRole: (roleName: string): boolean => {
     const user = authService.getCurrentUser()
-    return user?.roleName === roleName
+    if (!user) return false
+    try {
+      const userRole = normalizeRole((user as unknown as Record<string, unknown>)["role"] as string | undefined ?? ((user as unknown as Record<string, unknown>)["roleName"] as string | undefined))
+      return userRole === normalizeRole(roleName)
+    } catch {
+      return false
+    }
   },
 
   updateCurrentUser: (updates: Partial<User>): void => {
@@ -101,6 +107,17 @@ export const authService = {
         const safeUser = { ...user }
         const su = safeUser as Record<string, unknown>
         if ("token" in su) delete su["token"]
+
+        // Normalizar rol y añadir campo canonical `role` para comparaciones robustas
+        try {
+          const rawRole = (su["role"] ?? su["roleName"] ?? su["role_name"]) as string | undefined
+          const canonical = normalizeRole(rawRole)
+          su["role"] = canonical
+          if (!su["roleName"]) su["roleName"] = rawRole ?? ""
+        } catch {
+          // noop
+        }
+
         localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(safeUser))
       }
     } catch {

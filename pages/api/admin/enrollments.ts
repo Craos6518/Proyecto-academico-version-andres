@@ -1,13 +1,14 @@
 import type { NextApiRequest, NextApiResponse } from "next"
 import { supabaseAdmin } from "../../../lib/supabase-client"
+import { withAuth } from "../../../lib/middleware/auth"
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
     if (req.method === "GET") {
       const { data, error } = await supabaseAdmin.from("enrollments").select("*")
       if (error) throw error
-      const mapped = (data || []).map((row) => {
-        const r = row as unknown as Record<string, unknown>
+      const mapped = (data || []).map((row: Record<string, unknown>) => {
+        const r = row as Record<string, unknown>
         return {
           id: r["id"] as number,
           studentId: (r["student_id"] ?? r["studentId"]) as number,
@@ -91,3 +92,5 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(500).json({ error: message || "Error interno" })
   }
 }
+
+export default withAuth(handler, ["admin"])
