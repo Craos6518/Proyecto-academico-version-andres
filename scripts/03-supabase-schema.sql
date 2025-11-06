@@ -15,9 +15,10 @@ create table if not exists users (
   email text,
   first_name text,
   last_name text,
+  -- cedula: identificador nacional/externo, requerido y único
+  cedula text not null unique,
   role_id integer references roles(id),
   role_name text,
-  role text,
   is_active boolean default true,
   password text
 );

@@ -21,10 +21,10 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       })
 
       // fetch users with potentially admin roles
-      const { data: usersData } = await supabaseAdmin.from("users").select("id,role_id,role_name,role,roleName")
+      const { data: usersData } = await supabaseAdmin.from("users").select("id,role_id,role_name")
       let count = 0
       ;((usersData || []) as Array<Record<string, unknown>>).forEach((u) => {
-        const rawRole = (u["role_name"] ?? u["roleName"] ?? u["role"]) as string | undefined
+        const rawRole = (u["role_name"] ?? u["roleName"]) as string | undefined
         const roleId = Number(u["role_id"] ?? u["roleId"] ?? 0)
         if (roleId && adminRoleIds.includes(roleId)) {
           count++
@@ -55,7 +55,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     if (!Number.isNaN(id)) {
       rolesMap[id] = {
         id,
-        name: String(r["name"] ?? r["role_name"] ?? r["role"] ?? ""),
+        name: String(r["name"] ?? r["role_name"] ?? ""),
         description: String(r["description"] ?? ""),
       }
     }
@@ -63,8 +63,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
       const mapped = (data || []).map((row: Record<string, unknown>) => {
         const r = row as Record<string, unknown>
-        const roleId = (r["role_id"] ?? r["roleId"]) as number | null | undefined
-        const roleNameFromRow = (r["role_name"] ?? r["roleName"] ?? r["role"]) as string | undefined
+  const roleId = (r["role_id"] ?? r["roleId"]) as number | null | undefined
+  const roleNameFromRow = (r["role_name"] ?? r["roleName"]) as string | undefined
         const roleName = roleNameFromRow ?? (roleId && rolesMap[roleId] ? rolesMap[roleId]!.name : "")
         return {
           id: r["id"] as number,
@@ -75,6 +75,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
           roleId: (roleId ?? null) as number | null,
           roleName,
           isActive: (r["is_active"] ?? r["isActive"] ?? true) as boolean,
+          cedula: (r["cedula"] ?? r["cedula_ci"] ?? r["cedula_norm"] ?? "") as string,
         }
       })
       return res.status(200).json(mapped)
@@ -103,8 +104,13 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         return res.status(403).json({ error: "No autorizado para asignar rol Administrador" })
       }
       // Accept camelCase from client, convert to snake_case for DB
+      // cedula is required
+      if (!payload.cedula || String(payload.cedula).trim() === "") {
+        return res.status(400).json({ error: "Missing cedula" })
+      }
+
       const dbPayload = {
-        id: payload.id ?? undefined,
+        cedula: String(payload.cedula).trim(),
         username: payload.username,
         email: payload.email,
         first_name: payload.firstName,
@@ -114,20 +120,16 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         is_active: payload.isActive,
         password: payload.password ?? "demo123",
       }
-      // If DB schema doesn't provide auto-increment, compute an id = max(id)+1
-      if (dbPayload.id === undefined || dbPayload.id === null) {
-        const { data: lastRows, error: lastErr } = await supabaseAdmin
-          .from("users")
-          .select("id")
-          .order("id", { ascending: false })
-          .limit(1)
-        if (lastErr) throw lastErr
-        const lr = (lastRows as Array<Record<string, unknown>> | null) || []
-        const maxId = lr.length > 0 ? Number(lr[0]["id"] ?? lr[0]["ID"] ?? 0) : 0
-        dbPayload.id = maxId + 1
-      }
+
+      // Let the database assign `id` (auto-increment/identity). Do not compute or send id from the server.
       const { data, error } = await supabaseAdmin.from("users").insert(dbPayload).select().limit(1).single()
-      if (error) throw error
+      if (error) {
+        // Unique violation -> 409 Conflict
+        if ((error as any).code === "23505" || (error.message && String(error.message).toLowerCase().includes("duplicate"))) {
+          return res.status(409).json({ error: "Conflicto: cedula o campo único duplicado", detail: error.message })
+        }
+        throw error
+      }
       const row = data as unknown as Record<string, unknown>
       const mapped = {
         id: row["id"] as number,
@@ -136,7 +138,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         firstName: (row["first_name"] ?? row["firstName"] ?? "") as string,
         lastName: (row["last_name"] ?? row["lastName"] ?? "") as string,
         roleId: (row["role_id"] ?? row["roleId"] ?? null) as number | null,
-        roleName: (row["role_name"] ?? row["roleName"] ?? row["role"] ?? "") as string,
+  roleName: (row["role_name"] ?? row["roleName"] ?? "") as string,
         isActive: (row["is_active"] ?? row["isActive"] ?? true) as boolean,
       }
       return res.status(201).json(mapped)
@@ -177,13 +179,14 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     dbUpdates.role_name = updatesRec["roleName"]
   }
   if (updatesRec["email"] !== undefined) dbUpdates.email = updatesRec["email"]
+  if (updatesRec["cedula"] !== undefined) dbUpdates.cedula = String(updatesRec["cedula"]).trim()
   if (updatesRec["isActive"] !== undefined) dbUpdates.is_active = updatesRec["isActive"]
   if (updatesRec["password"] !== undefined) dbUpdates.password = updatesRec["password"]
 
       // LAST-ADMIN SAFEGUARD: prevent removing Admin role if this is the last admin
       try {
-        const { data: existingUser } = await supabaseAdmin.from("users").select("id,role_id,role_name,role,roleName").eq("id", id).limit(1).maybeSingle()
-        const rawCurrentRole = existingUser && ((existingUser as Record<string, unknown>).role_name ?? (existingUser as Record<string, unknown>).roleName ?? (existingUser as Record<string, unknown>).role) as string | undefined
+  const { data: existingUser } = await supabaseAdmin.from("users").select("id,role_id,role_name").eq("id", id).limit(1).maybeSingle()
+  const rawCurrentRole = existingUser && ((existingUser as Record<string, unknown>).role_name ?? (existingUser as Record<string, unknown>).roleName) as string | undefined
         const currentIsAdmin = rawCurrentRole ? normalizeRole(rawCurrentRole) === "admin" : false
 
         // determine what the new role would be after update
@@ -219,7 +222,12 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       }
 
       const { data, error } = await supabaseAdmin.from("users").update(dbUpdates).eq("id", id).select().limit(1).single()
-      if (error) throw error
+      if (error) {
+        if ((error as any).code === "23505" || (error.message && String(error.message).toLowerCase().includes("duplicate"))) {
+          return res.status(409).json({ error: "Conflicto: cedula o campo único duplicado", detail: error.message })
+        }
+        throw error
+      }
       const row = data
       const mapped = {
         id: row.id,
@@ -228,7 +236,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         firstName: row.first_name ?? row.firstName ?? "",
         lastName: row.last_name ?? row.lastName ?? "",
         roleId: row.role_id ?? row.roleId ?? null,
-        roleName: row.role_name ?? row.roleName ?? row.role ?? "",
+  roleName: row.role_name ?? row.roleName ?? "",
         isActive: row.is_active ?? row.isActive ?? true,
       }
       return res.status(200).json(mapped)
@@ -267,8 +275,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
       // Prevent deletion of users with Admin role by non-admin callers, and prevent deleting the last admin
       try {
-  const { data: targetUser } = await supabaseAdmin.from("users").select("id,role_id,role_name,role,roleName").eq("id", userId).limit(1).maybeSingle()
-  const rawRole = (targetUser && ((targetUser as Record<string, unknown>).role_name ?? (targetUser as Record<string, unknown>).roleName ?? (targetUser as Record<string, unknown>).role)) as string | undefined
+  const { data: targetUser } = await supabaseAdmin.from("users").select("id,role_id,role_name").eq("id", userId).limit(1).maybeSingle()
+  const rawRole = (targetUser && ((targetUser as Record<string, unknown>).role_name ?? (targetUser as Record<string, unknown>).roleName)) as string | undefined
         if (rawRole && normalizeRole(rawRole) === "admin") {
           if (callerRole !== "admin") {
             return res.status(403).json({ error: "No autorizado para eliminar usuarios con rol Administrador" })

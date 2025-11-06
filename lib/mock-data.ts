@@ -14,7 +14,8 @@ export interface User {
   lastName: string
   roleId: number
   roleName: string
-  role?: string // Nuevo: para compatibilidad JWT
+  // NOTE: `role` (free-text) removed to avoid confusion with `role_name` DB column.
+  cedula?: string
   isActive: boolean
   password: string
 }
@@ -77,6 +78,7 @@ export const mockUsers: User[] = [
     lastName: "Administrador",
     roleId: 1,
     roleName: "Administrador",
+    cedula: "000000001",
     isActive: true,
     password: "demo123",
   },
@@ -88,6 +90,7 @@ export const mockUsers: User[] = [
     lastName: "Directora",
     roleId: 2,
     roleName: "Director",
+    cedula: "000000002",
     isActive: true,
     password: "demo123",
   },
@@ -99,6 +102,7 @@ export const mockUsers: User[] = [
     lastName: "Pérez",
     roleId: 3,
     roleName: "Profesor",
+    cedula: "000000101",
     isActive: true,
     password: "demo123",
   },
@@ -110,6 +114,7 @@ export const mockUsers: User[] = [
     lastName: "García",
     roleId: 3,
     roleName: "Profesor",
+    cedula: "000000102",
     isActive: true,
     password: "demo123",
   },
@@ -121,6 +126,7 @@ export const mockUsers: User[] = [
     lastName: "López",
     roleId: 4,
     roleName: "Estudiante",
+    cedula: "100000001",
     isActive: true,
     password: "demo123",
   },
@@ -132,6 +138,7 @@ export const mockUsers: User[] = [
     lastName: "Martínez",
     roleId: 4,
     roleName: "Estudiante",
+    cedula: "100000002",
     isActive: true,
     password: "demo123",
   },
@@ -143,6 +150,7 @@ export const mockUsers: User[] = [
     lastName: "Rodríguez",
     roleId: 4,
     roleName: "Estudiante",
+    cedula: "100000003",
     isActive: true,
     password: "demo123",
   },

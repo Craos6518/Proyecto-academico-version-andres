@@ -33,7 +33,7 @@ if (!IS_TEST && !SUPABASE_SERVICE_KEY) {
 const makeTestDb = () => {
   const testData: Record<string, any[]> = {
     users: [
-      { id: 1, username: 'admin', email: 'admin@example.com', first_name: 'Admin', last_name: 'User', role_id: 1, role_name: 'Administrador', is_active: true },
+      { id: 1, username: 'admin', email: 'admin@example.com', first_name: 'Admin', last_name: 'User', role_id: 1, role_name: 'Administrador', is_active: true, cedula: '12345678' },
     ],
     roles: [
       { id: 1, name: 'Administrador', description: 'Admin role' },
@@ -79,15 +79,41 @@ const makeTestDb = () => {
       return Promise.resolve({ data: out, error: null }).then(onfulfilled, onrejected)
     }
 
-    ctx.insert = async (payload: any) => {
-      const rec = { ...(payload || {}) }
-      if (!rec.id) {
-        const maxId = (testData[table] || []).reduce((m, r) => Math.max(m, Number(r.id || 0)), 0)
-        rec.id = maxId + 1
+    // Implement insert as a chainable call to better emulate supabase-js behavior
+    ctx.insert = (payload: any) => {
+      const chain = {
+        _payload: Array.isArray(payload) ? payload[0] : payload,
+        select: function () {
+          // perform insertion now
+          const rec = { ...(this._payload || {}) }
+          if (!rec.id) {
+            const maxId = (testData[table] || []).reduce((m, r) => Math.max(m, Number(r.id || 0)), 0)
+            rec.id = maxId + 1
+          }
+          // Enforce some uniqueness constraints in the test stub to simulate DB behavior
+          if (table === 'users') {
+            testData[table] = testData[table] || []
+            // check unique username/email/cedula
+            const dup = (testData[table] || []).find((r: any) =>
+              (rec.username && r.username === rec.username) ||
+              (rec.email && r.email === rec.email) ||
+              (rec.cedula && r.cedula === rec.cedula)
+            )
+            if (dup) {
+              return {
+                limit: () => ({ single: async () => ({ data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint' } }) }),
+              }
+            }
+            testData[table].push(rec)
+            return { limit: () => ({ single: async () => ({ data: rec, error: null }) }) }
+          }
+
+          testData[table] = testData[table] || []
+          testData[table].push(rec)
+          return { limit: () => ({ single: async () => ({ data: rec, error: null }) }) }
+        },
       }
-      testData[table] = testData[table] || []
-      testData[table].push(rec)
-      return { data: [rec], error: null }
+      return chain
     }
 
     ctx.update = async (updates: any) => {

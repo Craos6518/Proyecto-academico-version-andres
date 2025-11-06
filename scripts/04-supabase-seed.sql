@@ -8,15 +8,14 @@ insert into roles (id, name, description) values
 (4, 'Estudiante', 'Consulta de calificaciones y materias')
 on conflict (id) do nothing;
 
--- Users (passwords en claro como en mock)
-insert into users (id, username, email, first_name, last_name, role_id, role_name, is_active, password) values
-(1, 'admin', 'admin@escuela.edu', 'Carlos', 'Administrador', 1, 'Administrador', true, 'demo123'),
-(2, 'director', 'director@escuela.edu', 'María', 'Directora', 2, 'Director', true, 'demo123'),
-(3, 'profesor1', 'profesor1@escuela.edu', 'Juan', 'Pérez', 3, 'Profesor', true, 'demo123'),
-(4, 'profesor2', 'profesor2@escuela.edu', 'Ana', 'García', 3, 'Profesor', true, 'demo123'),
-(5, 'estudiante1', 'estudiante1@escuela.edu', 'Pedro', 'López', 4, 'Estudiante', true, 'demo123'),
-(6, 'estudiante2', 'estudiante2@escuela.edu', 'Laura', 'Martínez', 4, 'Estudiante', true, 'demo123'),
-(7, 'estudiante3', 'estudiante3@escuela.edu', 'Diego', 'Rodríguez', 4, 'Estudiante', true, 'demo123')
+insert into users (id, username, email, first_name, last_name, role_id, role_name, is_active, password, cedula) values
+(1, 'admin', 'admin@escuela.edu', 'Carlos', 'Administrador', 1, 'Administrador', true, 'demo123', '000000001'),
+(2, 'director', 'director@escuela.edu', 'María', 'Directora', 2, 'Director', true, 'demo123', '000000002'),
+(3, 'profesor1', 'profesor1@escuela.edu', 'Juan', 'Pérez', 3, 'Profesor', true, 'demo123', '000000101'),
+(4, 'profesor2', 'profesor2@escuela.edu', 'Ana', 'García', 3, 'Profesor', true, 'demo123', '000000102'),
+(5, 'estudiante1', 'estudiante1@escuela.edu', 'Pedro', 'López', 4, 'Estudiante', true, 'demo123', '100000001'),
+(6, 'estudiante2', 'estudiante2@escuela.edu', 'Laura', 'Martínez', 4, 'Estudiante', true, 'demo123', '100000002'),
+(7, 'estudiante3', 'estudiante3@escuela.edu', 'Diego', 'Rodríguez', 4, 'Estudiante', true, 'demo123', '100000003')
 on conflict (id) do nothing;
 
 -- Subjects

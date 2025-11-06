@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -49,6 +49,32 @@ export function GradeManagement({ teacherId }: GradeManagementProps) {
   const [editingGrade, setEditingGrade] = useState<Grade | null>(null)
   const [deleteGradeId, setDeleteGradeId] = useState<number | null>(null)
   const [duplicateError, setDuplicateError] = useState<string>("")
+  // Batch grading (iterative) states
+  const [batchMode, setBatchMode] = useState(false)
+  const [gradingQueue, setGradingQueue] = useState<number[]>([])
+  const [currentIdx, setCurrentIdx] = useState(0)
+  const [skippedStudents, setSkippedStudents] = useState<number[]>([])
+  const [pendingStudents, setPendingStudents] = useState<number[]>([])
+  const [currentBatchAssignmentId, setCurrentBatchAssignmentId] = useState<number | null>(null)
+  const [pendingAssignmentId, setPendingAssignmentId] = useState<number | null>(null)
+
+  // compute assignments that still have at least one student without grade
+  const eligibleAssignments = useMemo(() => {
+    if (!assignments || assignments.length === 0) return [] as typeof assignments
+    // if no students known, return assignments (allow teacher to pick)
+    if (!students || students.length === 0) return assignments
+    return assignments.filter((a) => {
+      const gradedStudentIds = new Set(grades.filter((g) => g.assignmentId === a.id).map((g) => g.studentId))
+      return gradedStudentIds.size < students.length
+    })
+  }, [assignments, grades, students])
+
+  const buildQueueForAssignment = (assignmentId: number) => {
+    if (!assignmentId) return [] as number[]
+    return students
+      .filter((s) => !grades.some((g) => g.assignmentId === assignmentId && g.studentId === s.id))
+      .map((s) => s.id)
+  }
   const [formData, setFormData] = useState({
     studentId: 0,
     assignmentId: 0,
@@ -280,7 +306,7 @@ export function GradeManagement({ teacherId }: GradeManagementProps) {
   const calculateFinalGrade = (studentId: number): number | null => {
     // Return cached final grade if available, otherwise null
     const val = finalGradesMap[studentId]
-    return val !== undefined ? (val as number | null) : null
+    return val !== undefined ? (val as number | null) : null;
   }
 
   return (
@@ -309,11 +335,32 @@ export function GradeManagement({ teacherId }: GradeManagementProps) {
           open={isDialogOpen}
           onOpenChange={(open) => {
             setIsDialogOpen(open)
-            if (!open) resetForm()
+              if (open) {
+                // If we opened dialog for creating (not editing), start batch grading for the first eligible assignment
+                if (!editingGrade) {
+                  const chosenAssignmentId = eligibleAssignments[0]?.id ?? assignments[0]?.id ?? 0
+                  const queue = buildQueueForAssignment(chosenAssignmentId)
+                  setGradingQueue(queue)
+                  setCurrentIdx(0)
+                  setSkippedStudents([])
+                  setBatchMode(queue.length > 0)
+                  setCurrentBatchAssignmentId(chosenAssignmentId || null)
+                  setFormData({
+                    studentId: queue[0] ?? 0,
+                    assignmentId: chosenAssignmentId,
+                    score: 0,
+                    comments: "",
+                  })
+                }
+              } else {
+                resetForm()
+                setBatchMode(false)
+                setCurrentBatchAssignmentId(null)
+              }
           }}
         >
           <DialogTrigger asChild>
-            <Button disabled={selectedSubjectId === 0}>
+            <Button disabled={selectedSubjectId === 0 || eligibleAssignments.length === 0}>
               <Plus className="w-4 h-4 mr-2" />
               Nueva Calificación
             </Button>
@@ -333,37 +380,65 @@ export function GradeManagement({ teacherId }: GradeManagementProps) {
                     <AlertDescription>{duplicateError}</AlertDescription>
                   </Alert>
                 )}
-
-                <div className="space-y-2">
-                  <Label htmlFor="student">Estudiante</Label>
-                  <Select
-                    value={formData.studentId.toString()}
-                    onValueChange={(value) => {
-                      setFormData({ ...formData, studentId: Number.parseInt(value) })
-                      setDuplicateError("")
-                    }}
-                    disabled={!!editingGrade}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecciona un estudiante" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {students.map((student) => (
-                        <SelectItem key={student.id} value={student.id.toString()}>
-                          {student.firstName} {student.lastName}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                {/* Student selector: in batchMode show one student at a time, otherwise keep select for single edit/create */}
+                {batchMode ? (
+                  <div className="space-y-2">
+                    <Label>Estudiante</Label>
+                    <div className="p-3 border rounded-md">
+                      {students[currentIdx] ? (
+                        <div>
+                          <div className="font-medium">{students[currentIdx].firstName} {students[currentIdx].lastName}</div>
+                          <div className="text-sm text-muted-foreground">{students[currentIdx].username}</div>
+                        </div>
+                      ) : (
+                        <div className="text-muted-foreground">Sin estudiante</div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Label htmlFor="student">Estudiante</Label>
+                    <Select
+                      value={formData.studentId.toString()}
+                      onValueChange={(value) => {
+                        setFormData({ ...formData, studentId: Number.parseInt(value) })
+                        setDuplicateError("")
+                      }}
+                      disabled={!!editingGrade}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecciona un estudiante" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(formData.assignmentId
+                          ? students.filter((s) => !grades.some((g) => g.assignmentId === formData.assignmentId && g.studentId === s.id))
+                          : students
+                        ).map((student) => (
+                          <SelectItem key={student.id} value={student.id.toString()}>
+                            {student.firstName} {student.lastName}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
 
                 <div className="space-y-2">
                   <Label htmlFor="assignment">Evaluación</Label>
                   <Select
                     value={formData.assignmentId.toString()}
                     onValueChange={(value) => {
-                      setFormData({ ...formData, assignmentId: Number.parseInt(value) })
+                      const aid = Number.parseInt(value)
+                      setFormData({ ...formData, assignmentId: aid })
                       setDuplicateError("")
+                      // if batchMode, rebuild queue for the selected assignment
+                      if (batchMode && !editingGrade) {
+                        const queue = buildQueueForAssignment(aid)
+                        setGradingQueue(queue)
+                        setCurrentIdx(0)
+                        setFormData((fd) => ({ ...fd, studentId: queue[0] ?? 0 }))
+                        setCurrentBatchAssignmentId(aid)
+                      }
                     }}
                     disabled={!!editingGrade}
                   >
@@ -371,7 +446,7 @@ export function GradeManagement({ teacherId }: GradeManagementProps) {
                       <SelectValue placeholder="Selecciona una evaluación" />
                     </SelectTrigger>
                     <SelectContent>
-                      {assignments.map((assignment) => (
+                      {eligibleAssignments.map((assignment) => (
                         <SelectItem key={assignment.id} value={assignment.id.toString()}>
                           {assignment.name} ({assignment.weight}%)
                         </SelectItem>
@@ -408,9 +483,110 @@ export function GradeManagement({ teacherId }: GradeManagementProps) {
                     placeholder="Comentarios sobre la calificación..."
                   />
                 </div>
+
               </div>
-              <DialogFooter>
-                <Button type="submit">{editingGrade ? "Guardar Cambios" : "Registrar Calificación"}</Button>
+
+              <DialogFooter className="flex items-center gap-2">
+                {batchMode && !editingGrade ? (
+                  <>
+                    <Button
+                      onClick={async () => {
+                        // save current and move next
+                        const studentId = gradingQueue[currentIdx]
+                        if (!studentId) return
+                        try {
+                          // check duplicate
+                          const existing = grades.find((g) => g.studentId === studentId && g.assignmentId === formData.assignmentId)
+                          if (existing) {
+                            setDuplicateError(
+                              `Ya existe una calificación para ${getStudentName(studentId)} en ${getAssignmentName(
+                                formData.assignmentId,
+                              )}. Por favor, edita la calificación existente.`,
+                            )
+                            return
+                          }
+                          const res = await fetch(`/api/teacher/grades`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              studentId,
+                              assignmentId: formData.assignmentId,
+                              subjectId: selectedSubjectId,
+                              score: formData.score,
+                              comments: formData.comments,
+                              gradedBy: teacherId,
+                              gradedAt: new Date().toISOString(),
+                            }),
+                          })
+                          if (!res.ok) throw new Error("Error creating grade")
+                          // reload grades
+                          const gradesRes = await fetch(`/api/teacher/grades?subjectId=${selectedSubjectId}`)
+                          if (gradesRes.ok) {
+                            const gradesData: Grade[] = await gradesRes.json()
+                            setGrades(
+                              gradesData.map((g) => {
+                                const gr = g as unknown as Record<string, unknown>
+                                const studentId = Number(gr["studentId"] ?? gr["student_id"] ?? 0)
+                                const assignmentId = Number(gr["assignmentId"] ?? gr["assignment_id"] ?? 0)
+                                return { ...(g as object), studentId, assignmentId } as Grade
+                              }),
+                            )
+                          }
+                          // move next
+                          const next = currentIdx + 1
+                          if (next >= gradingQueue.length) {
+                            setIsDialogOpen(false)
+                            setBatchMode(false)
+                          } else {
+                            setCurrentIdx(next)
+                            setFormData({ ...formData, studentId: gradingQueue[next], score: 0, comments: "" })
+                          }
+                        } catch (err) {
+                          console.error(err)
+                          alert("Error al guardar la calificación")
+                        }
+                      }}
+                    >
+                      Guardar y Siguiente
+                    </Button>
+
+                    <Button
+                      variant="ghost"
+                      onClick={() => {
+                        const studentId = gradingQueue[currentIdx]
+                        if (!studentId) return
+                        setSkippedStudents((s) => Array.from(new Set([...s, studentId])))
+                        const next = currentIdx + 1
+                        if (next >= gradingQueue.length) {
+                          setIsDialogOpen(false)
+                          setBatchMode(false)
+                        } else {
+                          setCurrentIdx(next)
+                          setFormData({ ...formData, studentId: gradingQueue[next], score: 0, comments: "" })
+                        }
+                      }}
+                    >
+                      Omitir
+                    </Button>
+
+                    <Button
+                      variant="secondary"
+                      onClick={() => {
+                        // finish without grading remaining
+                        setIsDialogOpen(false)
+                        setBatchMode(false)
+                        // create pending list from remaining ungraded + skipped
+                        const remaining = gradingQueue.slice(currentIdx).filter(Boolean)
+                        const pendIds = Array.from(new Set([...skippedStudents, ...remaining]))
+                        setPendingStudents(pendIds)
+                      }}
+                    >
+                      Finalizar
+                    </Button>
+                  </>
+                ) : (
+                  <Button type="submit">{editingGrade ? "Guardar Cambios" : "Registrar Calificación"}</Button>
+                )}
               </DialogFooter>
             </form>
           </DialogContent>
@@ -419,6 +595,42 @@ export function GradeManagement({ teacherId }: GradeManagementProps) {
 
       {selectedSubjectId > 0 && (
         <div className="border rounded-lg">
+          {/* Pending skipped students area */}
+          {pendingStudents.length > 0 && (
+            <div className="p-3 border-b flex items-center justify-between">
+              <div>
+                <div className="font-medium">Lista de pendientes</div>
+                <div className="text-sm text-muted-foreground">{pendingStudents.length} estudiante(s) sin calificar</div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  onClick={() => {
+                    // start grading only pending students for the pending assignment if available
+                    const aid = pendingAssignmentId ?? eligibleAssignments[0]?.id ?? assignments[0]?.id ?? 0
+                    const queue = pendingStudents.filter((id) => !grades.some((g) => g.assignmentId === aid && g.studentId === id))
+                    setGradingQueue(queue)
+                    setCurrentIdx(0)
+                    setSkippedStudents([])
+                    setBatchMode(queue.length > 0)
+                    setIsDialogOpen(true)
+                    const first = queue[0] ?? null
+                    setFormData({ studentId: first ?? 0, assignmentId: aid, score: 0, comments: "" })
+                    setPendingStudents([])
+                    setPendingAssignmentId(null)
+                    setCurrentBatchAssignmentId(aid)
+                  }}
+                >
+                  Iniciar lista de pendientes
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={() => setPendingStudents([])}
+                >
+                  Limpiar
+                </Button>
+              </div>
+            </div>
+          )}
           <Table>
             <TableHeader>
               <TableRow>

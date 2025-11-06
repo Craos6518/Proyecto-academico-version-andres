@@ -24,7 +24,7 @@ export class SupabaseApiClient {
       return []
     }
     // Map snake_case DB fields to camelCase User type
-    return (data ?? []).map((row) => {
+    return (data ?? []).map((row: unknown) => {
       const r = row as unknown as Record<string, unknown>
       return {
         id: r["id"] as number,
@@ -33,10 +33,10 @@ export class SupabaseApiClient {
         firstName: (r["first_name"] ?? r["firstName"]) as string | undefined,
         lastName: (r["last_name"] ?? r["lastName"]) as string | undefined,
         roleId: (r["role_id"] ?? r["roleId"]) as number | undefined,
-        roleName: (r["role_name"] ?? r["roleName"]) as string | undefined,
-        role: (r["role"] ?? r["role"]) as string | undefined,
+  roleName: (r["role_name"] ?? r["roleName"]) as string | undefined,
         isActive: (r["is_active"] ?? r["isActive"]) as boolean | undefined,
         password_hash: (r["password_hash"] ?? r["passwordHash"]) as string | undefined,
+        cedula: (r["cedula"] ?? r["cedula_ci"] ?? r["cedula_norm"]) as string | undefined,
       }
     }) as User[]
   }
@@ -68,7 +68,17 @@ export class SupabaseApiClient {
 
   async createUser(user: Omit<User, "id">): Promise<User | null> {
   const supabaseAdmin = await getAdminClient()
-  const { data, error } = await supabaseAdmin.from("users").insert(user).select().limit(1).single()
+  // Ensure required DB columns exist: cedula and role
+  const safeUser = { ...user } as Record<string, unknown>
+  if (!safeUser.cedula || String(safeUser.cedula).trim() === "") {
+    safeUser.cedula = `legacy-${Date.now()}-${Math.floor(Math.random() * 1000)}`
+  }
+  // Do not populate a removed/free-text `role` column. Ensure we set role_name or role_id
+  // when available so DB remains consistent with roles table.
+  if (!safeUser.role_name && safeUser.roleName) safeUser.role_name = safeUser.roleName
+  if (!safeUser.role_id && (user as any).roleId) safeUser.role_id = (user as any).roleId
+
+  const { data, error } = await supabaseAdmin.from("users").insert(safeUser).select().limit(1).single()
     if (error) {
       console.error("createUser error:", error)
       return null
@@ -153,7 +163,7 @@ export class SupabaseApiClient {
   const supabaseAdmin = await getAdminClient()
   const { data, error } = await supabaseAdmin.from("enrollments").select("*")
     if (error) return []
-    return (data ?? []).map((row) => {
+    return (data ?? []).map((row: unknown) => {
       const r = row as unknown as Record<string, unknown>
       return {
         id: r["id"] as number,
@@ -170,7 +180,7 @@ export class SupabaseApiClient {
   // Query using snake_case column name
   const { data, error } = await supabaseAdmin.from("enrollments").select("*").eq("student_id", studentId)
     if (error) return []
-    return (data ?? []).map((row) => {
+    return (data ?? []).map((row: unknown) => {
       const r = row as unknown as Record<string, unknown>
       return {
         id: r["id"] as number,
@@ -186,7 +196,7 @@ export class SupabaseApiClient {
   const supabaseAdmin = await getAdminClient()
   const { data, error } = await supabaseAdmin.from("enrollments").select("*").eq("subject_id", subjectId)
     if (error) return []
-    return (data ?? []).map((row) => {
+    return (data ?? []).map((row: unknown) => {
       const r = row as unknown as Record<string, unknown>
       return {
         id: r["id"] as number,
@@ -263,7 +273,7 @@ export class SupabaseApiClient {
   const supabaseAdmin = await getAdminClient()
   const { data, error } = await supabaseAdmin.from("grades").select("*")
     if (error) return []
-    return (data ?? []).map((row) => {
+    return (data ?? []).map((row: unknown) => {
       const r = row as unknown as Record<string, unknown>
       const scoreVal = r["score"]
       return {
@@ -283,7 +293,7 @@ export class SupabaseApiClient {
   const supabaseAdmin = await getAdminClient()
   const { data, error } = await supabaseAdmin.from("grades").select("*").eq("student_id", studentId)
     if (error) return []
-    return (data ?? []).map((row) => {
+    return (data ?? []).map((row: unknown) => {
       const r = row as unknown as Record<string, unknown>
       const scoreVal = r["score"]
       return {
@@ -303,7 +313,7 @@ export class SupabaseApiClient {
   const supabaseAdmin = await getAdminClient()
   const { data, error } = await supabaseAdmin.from("grades").select("*").eq("subject_id", subjectId)
     if (error) return []
-    return (data ?? []).map((row) => {
+    return (data ?? []).map((row: unknown) => {
       const r = row as unknown as Record<string, unknown>
       const scoreVal = r["score"]
       return {
@@ -328,7 +338,7 @@ export class SupabaseApiClient {
       .eq("subject_id", subjectId)
 
     if (error) return []
-    return (data ?? []).map((row) => {
+    return (data ?? []).map((row: unknown) => {
       const r = row as unknown as Record<string, unknown>
       const scoreVal = r["score"]
       return {

@@ -71,14 +71,14 @@ export function UsersManagement() {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingUser, setEditingUser] = useState<User | null>(null)
   const [formData, setFormData] = useState<{
-    id: number | undefined;
+    cedula: string;
     username: string;
     email: string;
     firstName: string;
     lastName: string;
     roleId: number;
   }>({
-    id: undefined,
+    cedula: "",
     username: "",
     email: "",
     firstName: "",
@@ -91,7 +91,9 @@ export function UsersManagement() {
   const [passwordSuccess, setPasswordSuccess] = useState(false)
 
   const currentUser = authService.getCurrentUser()
-  const currentRole = normalizeRole(currentUser?.role ?? currentUser?.roleName)
+  // Prefer explicit roleName fields (roleName or role_name). `role` textual column has been removed.
+  // Use explicit roleName (provided by API) or role_name if present; do not rely on free-text `role` column.
+  const currentRole = normalizeRole(currentUser?.roleName ?? (currentUser as any)?.role_name)
   const isDirector = currentRole === "director"
   const isAdmin = currentRole === "admin"
 
@@ -111,7 +113,8 @@ export function UsersManagement() {
           firstName: (u['firstName'] ?? u['first_name'] ?? '') as string,
           lastName: (u['lastName'] ?? u['last_name'] ?? '') as string,
           roleId: Number(u['roleId'] ?? u['role_id'] ?? 0),
-          roleName: String(u['roleName'] ?? u['role_name'] ?? u['role'] ?? ''),
+          roleName: String(u['roleName'] ?? u['role_name'] ?? ''),
+          cedula: String(u['cedula'] ?? u['cedula_ci'] ?? ''),
         }))
         setUsers(mapped)
       })
@@ -134,7 +137,8 @@ export function UsersManagement() {
   }, [isAdmin])
 
   const filteredUsers = users
-    .filter((user) => !isDirector || normalizeRole(user.role ?? user.roleName) !== "admin")
+  // Use roleName/role_name for role detection. `role` textual column removed.
+  .filter((user) => !isDirector || normalizeRole(user.roleName ?? (user as any).role_name) !== "admin")
     .filter((user) => {
       const matchesSearch =
         user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -142,7 +146,7 @@ export function UsersManagement() {
         `${user.firstName} ${user.lastName}`.toLowerCase().includes(searchTerm.toLowerCase())
 
       const matchesRole =
-        roleFilter === "all" || normalizeRole(user.role ?? user.roleName) === normalizeRole(roleFilter)
+        roleFilter === "all" || normalizeRole(user.roleName ?? (user as any).role_name) === normalizeRole(roleFilter)
 
       return matchesSearch && matchesRole
     })
@@ -150,8 +154,24 @@ export function UsersManagement() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
   const role = availableRoles.find((r) => r.id === formData.roleId);
+    if (!formData.cedula || String(formData.cedula).trim() === "") {
+      alert('La cédula es obligatoria')
+      return
+    }
+    // Validar formato de cédula: solo dígitos, entre 6 y 12 caracteres (ajustable)
+    const cedulaNorm = String(formData.cedula).trim()
+    const cedulaRe = /^[0-9]{6,12}$/
+    if (!cedulaRe.test(cedulaNorm)) {
+      alert('Cédula inválida. Debe contener solo dígitos y tener entre 6 y 12 caracteres.')
+      return
+    }
     const payload = {
-      ...formData,
+      cedula: cedulaNorm,
+      username: formData.username,
+      email: formData.email,
+      firstName: formData.firstName,
+      lastName: formData.lastName,
+      roleId: formData.roleId,
       roleName: role?.name || "Estudiante",
       password: editingUser ? undefined : "demo123",
       isActive: true,
@@ -161,7 +181,7 @@ export function UsersManagement() {
         const res = await fetch('/api/admin/users', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
+          body: JSON.stringify({ id: editingUser.id, ...payload })
         });
         if (res.status === 403) {
           alert('No autorizado para realizar esta acción')
@@ -197,7 +217,7 @@ export function UsersManagement() {
   const handleEdit = (user: User) => {
     setEditingUser(user);
     setFormData({
-      id: user.id,
+      cedula: (user as any).cedula ?? "",
       username: user.username,
       email: user.email ?? "",
       firstName: user.firstName ?? "",
@@ -210,7 +230,7 @@ export function UsersManagement() {
   const resetForm = () => {
     setEditingUser(null)
     setFormData({
-      id: undefined,
+      cedula: "",
       username: "",
       email: "",
       firstName: "",
@@ -334,13 +354,13 @@ export function UsersManagement() {
             <form onSubmit={handleSubmit}>
               <div className="space-y-4 py-4">
                 <div className="space-y-2">
-                  <Label htmlFor="id">ID</Label>
+                  <Label htmlFor="cedula">Cédula</Label>
                   <Input
-                    id="id"
-                    type="number"
-                    value={formData.id ?? ""}
-                    onChange={(e) => setFormData({ ...formData, id: e.target.value === "" ? undefined : Number(e.target.value) })}
-                    placeholder="ID único (entero)"
+                    id="cedula"
+                    value={formData.cedula}
+                    onChange={(e) => setFormData({ ...formData, cedula: e.target.value })}
+                    required
+                    placeholder="Número de cédula"
                   />
                 </div>
                 <div className="space-y-2">
@@ -515,6 +535,7 @@ export function UsersManagement() {
             <TableRow>
               <TableHead>Usuario</TableHead>
               <TableHead>Nombre</TableHead>
+              <TableHead>Cédula</TableHead>
               <TableHead>Email</TableHead>
               <TableHead>Rol</TableHead>
               <TableHead className="text-right">Acciones</TableHead>
@@ -523,7 +544,7 @@ export function UsersManagement() {
           <TableBody>
             {filteredUsers.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center text-muted-foreground">
+                <TableCell colSpan={6} className="text-center text-muted-foreground">
                   No se encontraron usuarios
                 </TableCell>
               </TableRow>
@@ -534,6 +555,7 @@ export function UsersManagement() {
                   <TableCell>
                     {user.firstName ?? ""} {user.lastName ?? ""}
                   </TableCell>
+                  <TableCell>{(user as any).cedula ?? ""}</TableCell>
                   <TableCell>{user.email}</TableCell>
                   <TableCell>
                     <Badge variant={getRoleBadgeVariant(user.roleName ?? "")}>

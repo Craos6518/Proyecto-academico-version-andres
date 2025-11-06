@@ -18,6 +18,7 @@ export interface User {
   // In production we expect password_hash (bcrypt). Cleartext password should not be used.
   password?: string
   password_hash?: string
+  cedula?: string
 }
 
 export interface Subject {
