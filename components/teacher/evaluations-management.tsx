@@ -38,6 +38,7 @@ export function EvaluationsManagement({ teacherId }: EvaluationsManagementProps)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [deleteErrorMessage, setDeleteErrorMessage] = useState<string | null>(null)
+  const [dateError, setDateError] = useState<string | null>(null)
   const [formData, setFormData] = useState({
     subjectId: 0,
     name: "",
@@ -160,6 +161,26 @@ export function EvaluationsManagement({ teacherId }: EvaluationsManagementProps)
     e.preventDefault()
 
     ;(async () => {
+      // Cliente: validar fecha de entrega no anterior a hoy (comparación por fecha)
+      if (formData.dueDate) {
+        try {
+          const provided = new Date(String(formData.dueDate))
+          const today = new Date()
+          today.setHours(0, 0, 0, 0)
+          if (isNaN(provided.getTime())) {
+            setDateError("Fecha de entrega inválida")
+            return
+          }
+          if (provided.getTime() < today.getTime()) {
+            setDateError("La fecha de entrega no puede ser anterior a la fecha actual")
+            return
+          }
+        } catch (err) {
+          setDateError("Fecha de entrega inválida")
+          return
+        }
+      }
+      setDateError(null)
       try {
         if (editingAssignment) {
           const res = await fetch(`/api/teacher/assignments`, {
@@ -412,12 +433,19 @@ export function EvaluationsManagement({ teacherId }: EvaluationsManagementProps)
                       id="dueDate"
                       type="date"
                       value={formData.dueDate}
-                      onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
+                        onChange={(e) => {
+                          setFormData({ ...formData, dueDate: e.target.value })
+                          // limpiar error de fecha al cambiar
+                          if (dateError) setDateError(null)
+                        }}
                       required
                     />
                   </div>
                 </div>
               </div>
+                {dateError && (
+                  <div className="my-2 p-2 bg-red-50 border border-red-200 rounded text-sm text-red-700">{dateError}</div>
+                )}
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
                   Cancelar

@@ -56,6 +56,18 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         weight: payload.weight ?? null,
         due_date: payload.dueDate ?? payload.due_date ?? null,
       }
+      // Server-side: validar due_date no anterior a hoy
+      if (dbPayload.due_date) {
+        const provided = new Date(String(dbPayload.due_date))
+        if (isNaN(provided.getTime())) {
+          return res.status(400).json({ error: "Fecha de entrega inválida" })
+        }
+        const today = new Date()
+        today.setHours(0, 0, 0, 0)
+        if (provided.getTime() < today.getTime()) {
+          return res.status(400).json({ error: "La fecha de entrega no puede ser anterior a la fecha actual" })
+        }
+      }
       if (!dbPayload.id) {
         try {
           const { data: maxRow, error: maxErr } = await supabaseAdmin.from("assignments").select("id").order("id", { ascending: false }).limit(1).maybeSingle()
@@ -84,7 +96,15 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       if ((updates as Record<string, unknown>).assignmentType !== undefined) dbUpdates.assignment_type = (updates as Record<string, unknown>).assignmentType
       if ((updates as Record<string, unknown>).maxScore !== undefined) dbUpdates.max_score = (updates as Record<string, unknown>).maxScore
       if ((updates as Record<string, unknown>).weight !== undefined) dbUpdates.weight = (updates as Record<string, unknown>).weight
-      if ((updates as Record<string, unknown>).dueDate !== undefined) dbUpdates.due_date = (updates as Record<string, unknown>).dueDate
+      if ((updates as Record<string, unknown>).dueDate !== undefined) {
+        const d = updates.dueDate
+        const provided = new Date(String(d))
+        if (isNaN(provided.getTime())) return res.status(400).json({ error: "Fecha de entrega inválida" })
+        const today = new Date()
+        today.setHours(0, 0, 0, 0)
+        if (provided.getTime() < today.getTime()) return res.status(400).json({ error: "La fecha de entrega no puede ser anterior a la fecha actual" })
+        dbUpdates.due_date = (updates as Record<string, unknown>).dueDate
+      }
 
       const { data, error } = await supabaseAdmin.from("assignments").update(dbUpdates).eq("id", id).select().limit(1).single()
       if (error) throw error
