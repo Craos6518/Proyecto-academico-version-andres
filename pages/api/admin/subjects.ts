@@ -2,11 +2,44 @@ import type { NextApiRequest, NextApiResponse } from "next"
 import { supabaseAdmin } from "../../../lib/supabase-client"
 import type { User } from "../../../lib/types"
 import { withAuth } from "../../../lib/middleware/auth"
+import { normalizeRole } from "../../../lib/auth"
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
     if (req.method === "GET") {
-      const { data, error } = await supabaseAdmin.from("subjects").select("*")
+      // Allow role-aware access: admins/directors can list all subjects.
+      // Teachers may request only their own subjects (either by omitting teacherId
+      // or by passing ?teacherId=<theirId>). We enforce that a teacher cannot
+      // request other teachers' subjects.
+      const teacherIdParam = req.query.teacherId
+      const reqUser = (req as unknown as { user?: Record<string, unknown> }).user
+      const payloadRoleRaw = reqUser ? (reqUser["role"] ?? reqUser["roleName"] ?? reqUser["role_name"]) as string | undefined : undefined
+      const payloadRole = normalizeRole(payloadRoleRaw)
+
+      // Build base query
+      let query = supabaseAdmin.from("subjects").select("*")
+
+      if (teacherIdParam !== undefined) {
+        const sid = Number(teacherIdParam)
+        if (!Number.isNaN(sid)) {
+          // If requester is a teacher, ensure they only request their own subjects
+          if (payloadRole === "teacher") {
+            const requesterId = reqUser && (reqUser["id"] ?? reqUser["sub"] ?? reqUser["userId"]) as number | string | undefined
+            if (Number(requesterId) !== sid) {
+              return res.status(403).json({ error: "No tienes permisos para acceder a materias de otro docente" })
+            }
+          }
+          query = query.eq("teacher_id", sid)
+        }
+      } else if (payloadRole === "teacher") {
+        // If no teacherId provided and requester is teacher, return only their subjects
+        const requesterId = reqUser && (reqUser["id"] ?? reqUser["sub"] ?? reqUser["userId"]) as number | string | undefined
+        if (requesterId) {
+          query = query.eq("teacher_id", Number(requesterId))
+        }
+      }
+
+      const { data, error } = await query
       if (error) throw error
       // fetch users to map teacher names when missing
   const { data: usersData } = await supabaseAdmin.from("users").select("id, first_name, last_name, firstName, lastName")
@@ -38,7 +71,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         }
       })
       return res.status(200).json(mapped)
-    }
+  }
 
     if (req.method === "POST") {
   const payload = req.body as Record<string, unknown>
@@ -128,4 +161,6 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   }
 }
 
-export default withAuth(handler, ["admin", "director"])
+// Use withAuth with no static role whitelist so the handler can perform
+// role-aware checks depending on request parameters (see GET logic above).
+export default withAuth(handler, [])

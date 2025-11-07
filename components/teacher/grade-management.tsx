@@ -60,7 +60,7 @@ export function GradeManagement({ teacherId }: GradeManagementProps) {
   useEffect(() => {
     ;(async () => {
       try {
-        const res = await fetch(`/api/admin/subjects?teacherId=${teacherId}`)
+        const res = await fetch(`/api/teacher/subjects?teacherId=${teacherId}`)
         if (!res.ok) throw new Error("Error fetching subjects")
         const data: Subject[] = await res.json()
         setSubjects(data)
@@ -76,10 +76,10 @@ export function GradeManagement({ teacherId }: GradeManagementProps) {
       ;(async () => {
         try {
           const [enrRes, gradesRes, assignsRes, usersRes] = await Promise.all([
-            fetch(`/api/admin/enrollments?subjectId=${selectedSubjectId}`),
+            fetch(`/api/teacher/enrollments?subjectId=${selectedSubjectId}`),
             fetch(`/api/teacher/grades?subjectId=${selectedSubjectId}`),
             fetch(`/api/teacher/assignments?subjectId=${selectedSubjectId}`),
-            fetch(`/api/admin/users`),
+            fetch(`/api/teacher/students?subjectId=${selectedSubjectId}`),
           ])
 
           if (!enrRes.ok || !gradesRes.ok || !assignsRes.ok || !usersRes.ok) throw new Error("Error fetching subject data")
@@ -195,6 +195,14 @@ export function GradeManagement({ teacherId }: GradeManagementProps) {
             return { ...(g as object), studentId, assignmentId } as Grade
           }),
         )
+        // Notify other parts of the app that grades changed (so cards / stats can refresh)
+        try {
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("grades:updated", { detail: { subjectId: selectedSubjectId } }))
+          }
+        } catch (e) {
+          /* ignore */
+        }
 
         if (!keepOpen || editingGrade) {
           setIsDialogOpen(false)
@@ -249,6 +257,14 @@ export function GradeManagement({ teacherId }: GradeManagementProps) {
         const gradesRes = await fetch(`/api/teacher/grades?subjectId=${selectedSubjectId}`)
         const gradesData: Grade[] = await gradesRes.json()
         setGrades(gradesData)
+        // Notify other parts of the app that grades changed after delete
+        try {
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("grades:updated", { detail: { subjectId: selectedSubjectId } }))
+          }
+        } catch (e) {
+          /* ignore */
+        }
         setDeleteGradeId(null)
       } catch (err) {
         console.error(err)

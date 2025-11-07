@@ -26,15 +26,15 @@ export function MySubjects({ teacherId }: MySubjectsProps) {
   useEffect(() => {
     ;(async () => {
       try {
-        const res = await fetch(`/api/admin/subjects?teacherId=${teacherId}`)
+        const res = await fetch(`/api/teacher/subjects?teacherId=${teacherId}`)
         if (!res.ok) throw new Error("Error fetching subjects")
         const data: Subject[] = await res.json()
         setSubjects(data)
         // preload enrollments and assignments counts for the fetched subjects
         try {
           const [enrRes, assignRes] = await Promise.all([
-            fetch(`/api/admin/enrollments`),
-            fetch(`/api/admin/assignments`),
+            fetch(`/api/teacher/enrollments`),
+            fetch(`/api/teacher/assignments`),
           ])
           if (enrRes.ok) {
             const allEnrollments = (await enrRes.json()) as Array<Record<string, unknown>>
@@ -73,9 +73,9 @@ export function MySubjects({ teacherId }: MySubjectsProps) {
     ;(async () => {
       try {
         const [enrRes, assignRes, usersRes] = await Promise.all([
-          fetch(`/api/admin/enrollments?subjectId=${subject.id}`),
-          fetch(`/api/admin/assignments?subjectId=${subject.id}`),
-          fetch(`/api/admin/users`),
+          fetch(`/api/teacher/enrollments?subjectId=${subject.id}`),
+          fetch(`/api/teacher/assignments?subjectId=${subject.id}`),
+          fetch(`/api/teacher/students?subjectId=${subject.id}`),
         ])
 
         if (!enrRes.ok || !assignRes.ok || !usersRes.ok) throw new Error("Error fetching details")

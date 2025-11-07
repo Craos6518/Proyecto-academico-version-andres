@@ -1,11 +1,44 @@
 import type { NextApiRequest, NextApiResponse } from "next"
 import { supabaseAdmin } from "../../../lib/supabase-client"
 import { withAuth } from "../../../lib/middleware/auth"
+import { normalizeRole } from "../../../lib/auth"
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
     if (req.method === "GET") {
-      const { data, error } = await supabaseAdmin.from("enrollments").select("*")
+      // Support optional filtering by subjectId query param
+      const subjectIdParam = req.query.subjectId
+
+      // Allow role-aware access: admin/director may list all enrollments.
+      // Teachers can request enrollments for a specific subject only if they
+      // are the teacher of that subject.
+      const reqUser = (req as unknown as { user?: Record<string, unknown> }).user
+      const payloadRoleRaw = reqUser ? (reqUser["role"] ?? reqUser["roleName"] ?? reqUser["role_name"]) as string | undefined : undefined
+      const payloadRole = normalizeRole(payloadRoleRaw)
+
+      let query = supabaseAdmin.from("enrollments").select("*")
+
+      if (subjectIdParam !== undefined) {
+        const sid = Number(subjectIdParam)
+        if (!Number.isNaN(sid)) {
+          // If requester is a teacher, verify they are the owner of the subject
+          if (payloadRole === "teacher") {
+            const { data: subjectRow, error: subjErr } = await supabaseAdmin.from("subjects").select("teacher_id").eq("id", sid).maybeSingle()
+            if (subjErr) throw subjErr
+            const teacherIdOfSubject = subjectRow ? (subjectRow["teacher_id"] ?? subjectRow["teacherId"]) as number | undefined : undefined
+            const requesterId = reqUser && (reqUser["id"] ?? reqUser["sub"] ?? reqUser["userId"]) as number | string | undefined
+            if (!teacherIdOfSubject || Number(requesterId) !== Number(teacherIdOfSubject)) {
+              return res.status(403).json({ error: "No tienes permisos para ver inscripciones de esta materia" })
+            }
+          }
+          query = query.eq("subject_id", sid)
+        }
+      } else if (payloadRole === "teacher") {
+        // If a teacher requests enrollments but didn't pass a subjectId, disallow listing all enrollments
+        return res.status(400).json({ error: "Se requiere subjectId para que un docente consulte inscripciones" })
+      }
+
+      const { data, error } = await query
       if (error) throw error
       const mapped = (data || []).map((row: Record<string, unknown>) => {
         const r = row as Record<string, unknown>
@@ -93,4 +126,5 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   }
 }
 
-export default withAuth(handler, ["admin"])
+// Use withAuth with no static whitelist and perform role-aware checks inside
+export default withAuth(handler, [])
