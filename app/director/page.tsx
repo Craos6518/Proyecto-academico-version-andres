@@ -311,6 +311,13 @@ export default async function DirectorDashboard() {
       </DashboardLayout>
     )
   } catch (err) {
+    // NEXT_REDIRECT es un mecanismo interno de Next para hacer redirect desde Server Components.
+    // No debemos tratarlo como un error inesperado ni capturarlo silenciosamente — debe propagarse
+    // para que Next lo procese. Detectamos ese caso y lo relanzamos.
+    const e = err as any
+    const isNextRedirect = e && (e.message === "NEXT_REDIRECT" || (typeof e.digest === "string" && e.digest.includes("NEXT_REDIRECT")))
+    if (isNextRedirect) throw err
+
     // Loguear stack trace para investigar la causa raíz sin mostrar la página de error al usuario
     console.error("DirectorDashboard unexpected error:", err)
     return redirect("/")

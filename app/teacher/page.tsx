@@ -50,20 +50,37 @@ export default function TeacherDashboard() {
       return
     }
     setUser(currentUser)
-
     // Fetch teacher stats from server (Supabase)
-    fetch(`/api/teacher/stats?teacherId=${currentUser.id}`)
-      .then((r) => r.json())
-      .then((data) => {
-        setStats({
-          mySubjects: data.mySubjects,
-          totalStudents: data.totalStudents,
-          pendingGrades: data.pendingGrades,
-          averageGrade: data.averageGrade,
+    const fetchStats = () => {
+      fetch(`/api/teacher/stats?teacherId=${currentUser.id}`)
+        .then((r) => r.json())
+        .then((data) => {
+          setStats({
+            mySubjects: data.mySubjects,
+            totalStudents: data.totalStudents,
+            pendingGrades: data.pendingGrades,
+            averageGrade: data.averageGrade,
+          })
+          setPendingGradesDetails(data.pendingDetails || [])
         })
-        setPendingGradesDetails(data.pendingDetails || [])
-      })
-      .catch((err) => console.error("Failed to load teacher stats", err))
+        .catch((err) => console.error("Failed to load teacher stats", err))
+    }
+
+    // initial load
+    fetchStats()
+
+    // listen for grade updates from other components and refresh stats
+    const handler = (e: Event) => {
+      try {
+        fetchStats()
+      } catch (err) {
+        console.error("Failed to refresh stats on grades:updated", err)
+      }
+    }
+    window.addEventListener("grades:updated", handler)
+
+    // cleanup listener when component unmounts or router changes
+    return () => window.removeEventListener("grades:updated", handler)
   }, [router])
 
   if (!user) return null

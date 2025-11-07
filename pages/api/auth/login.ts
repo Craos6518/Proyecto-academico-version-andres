@@ -52,15 +52,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     console.log(`[auth/login] login exitoso: ${username}`)
-    // Build a minimal User shape for token generation (avoid `any`)
+    const rawRole = (user['roleName'] ?? user['role'] ?? user['role_name']) as string | undefined ?? ''
+    const roleKey = normalizeRole(rawRole)
+
+    // Build a minimal User shape for token generation (include role so JWT contains role claim)
     const userForToken: User = {
       id: Number(user.id ?? 0),
       username: String(user.username ?? username),
       email: String(user.email ?? ''),
+      // include role/name to ensure generated JWT contains role claim used in server-side pages
+      role: roleKey,
+      roleName: rawRole,
     }
+
     const token = generateJWT(userForToken)
-    const rawRole = (user['roleName'] ?? user['role'] ?? user['role_name']) as string | undefined ?? ''
-    const roleKey = normalizeRole(rawRole)
 
   // Set HttpOnly cookie with token (server-side session)
   const maxAge = 60 * 60 * 8 // 8h
