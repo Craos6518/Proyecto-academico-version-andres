@@ -2,48 +2,43 @@
 
 import { authService } from "../auth"
 
+// Cambia la propia contraseña llamando al endpoint seguro /api/auth/change-password
 export async function changeOwnPassword(
-  userId: number,
+  _userId: number,
   currentPassword: string,
   newPassword: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    // Call server to update password
-    try {
-      // Verify current password by fetching user (server should validate in real impl)
-      const resVerify = await fetch(`/api/admin/users?id=${userId}`)
-      if (!resVerify.ok) return { success: false, error: "Usuario no encontrado" }
+    // Call server endpoint that verifies current password and updates hash server-side
+    const res = await fetch(`/api/auth/change-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ currentPassword, newPassword }),
+    })
 
-      // For now, server doesn't verify current password; front-end enforces by fetching current user from local session
-      const currentUser = authService.getCurrentUser()
-      if (currentUser && currentUser.password !== currentPassword) {
-        return { success: false, error: "Contraseña actual incorrecta" }
-      }
-
-      const res = await fetch(`/api/admin/users`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: userId, password: newPassword }),
-      })
-
-      if (!res.ok) return { success: false, error: "Error al actualizar la contraseña" }
-
-      // Update current user session if changing own password
-      if (currentUser && currentUser.id === userId) {
-        authService.updateCurrentUser({ password: newPassword })
-      }
-
-      return { success: true }
-    } catch (error) {
-      console.error("Error updating password via API:", error)
-      return { success: false, error: "Error al cambiar la contraseña" }
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}))
+      return { success: false, error: body.error || body.message || "Error al cambiar la contraseña" }
     }
+
+    // Optionally update local cached user info (avoid storing passwords locally)
+    try {
+      const currentUser = authService.getCurrentUser()
+      if (currentUser) {
+        authService.updateCurrentUser({}) // noop by default; keep signature for compatibility
+      }
+    } catch {
+      // noop
+    }
+
+    return { success: true }
   } catch (error) {
-    console.error("[v0] Error changing password:", error)
+    console.error("[changeOwnPassword] error:", error)
     return { success: false, error: "Error al cambiar la contraseña" }
   }
 }
 
+// Admin/director flow for changing other users' passwords still uses admin API
 export async function changeUserPassword(
   adminUserId: number,
   adminRole: string,
