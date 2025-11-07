@@ -148,9 +148,38 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     if (req.method === "DELETE") {
       const { id } = req.query
       if (!id) return res.status(400).json({ error: "Missing id" })
-      const { error } = await supabaseAdmin.from("subjects").delete().eq("id", Number(id))
-      if (error) throw error
-      return res.status(204).end()
+      const subjectId = Number(id)
+      // Defensive: ensure id is a number
+      if (Number.isNaN(subjectId)) return res.status(400).json({ error: "Invalid id" })
+
+      // First, do not allow deleting a subject that has enrolled students
+      try {
+        const { data: enrollsData, count: enrollCount, error: enrollCountErr } = await supabaseAdmin
+          .from("enrollments")
+          .select("id", { count: "exact" })
+          .eq("subject_id", subjectId)
+
+        if (enrollCountErr) throw enrollCountErr
+        if (enrollCount && enrollCount > 0) {
+          return res.status(409).json({ error: "No se puede eliminar la materia: existen estudiantes matriculados" })
+        }
+
+        // No enrollments -> safe to remove assignments and grades related to this subject, then delete subject
+        const { error: gradesErr } = await supabaseAdmin.from("grades").delete().eq("subject_id", subjectId)
+        if (gradesErr) throw gradesErr
+
+        const { error: assignmentsErr } = await supabaseAdmin.from("assignments").delete().eq("subject_id", subjectId)
+        if (assignmentsErr) throw assignmentsErr
+
+        const { error: subjErr } = await supabaseAdmin.from("subjects").delete().eq("id", subjectId)
+        if (subjErr) throw subjErr
+
+        return res.status(204).end()
+      } catch (innerErr: unknown) {
+        const msg = innerErr instanceof Error ? innerErr.message : String(innerErr)
+        console.error("admin/subjects delete check error:", innerErr)
+        return res.status(500).json({ error: msg || "Error al intentar eliminar la materia" })
+      }
     }
 
       return res.status(405).json({ error: "Method not allowed" })
