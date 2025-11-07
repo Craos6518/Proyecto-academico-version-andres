@@ -50,6 +50,7 @@ export function GradeManagement({ teacherId }: GradeManagementProps) {
   const [deleteGradeId, setDeleteGradeId] = useState<number | null>(null)
   const [currentStudentIndex, setCurrentStudentIndex] = useState<number>(0)
   const [duplicateError, setDuplicateError] = useState<string>("")
+  const [skippedStudentIds, setSkippedStudentIds] = useState<number[]>([])
   const [formData, setFormData] = useState({
     studentId: 0,
     assignmentId: 0,
@@ -134,6 +135,8 @@ export function GradeManagement({ teacherId }: GradeManagementProps) {
             if (fr && fr.sid !== undefined) finalsMap[Number(fr.sid)] = fr.final
           })
           setFinalGradesMap(finalsMap)
+          // reset skipped students when subject changes
+          setSkippedStudentIds([])
         } catch (err) {
           console.error(err)
         }
@@ -249,6 +252,29 @@ export function GradeManagement({ teacherId }: GradeManagementProps) {
     setIsDialogOpen(true)
   }
 
+  const handleSkip = () => {
+    // Mark current student as skipped for this dialog session and advance
+    const currentSid = editingGrade ? editingGrade.studentId : eligibleStudents[currentStudentIndex]?.id
+    if (!currentSid) return
+    const newSkipped = Array.from(new Set([...skippedStudentIds, Number(currentSid)]))
+    setSkippedStudentIds(newSkipped)
+
+    // compute new eligible after skipping
+    const remaining = eligibleStudents.filter((s) => !newSkipped.includes(s.id))
+    if (remaining.length === 0) {
+      // close dialog if no one left
+      setIsDialogOpen(false)
+      resetForm()
+      return
+    }
+
+    // advance index within the remaining list
+    const nextIndex = 0 // always start from first in remaining after skip
+    setCurrentStudentIndex(nextIndex)
+    setFormData((prev) => ({ ...prev, studentId: remaining[nextIndex]?.id || 0 }))
+    setDuplicateError("")
+  }
+
   const handleDelete = (gradeId: number) => {
     ;(async () => {
       try {
@@ -288,8 +314,8 @@ export function GradeManagement({ teacherId }: GradeManagementProps) {
   const eligibleStudents = useMemo(() => {
     const aid = formData.assignmentId
     if (!aid) return students
-    return students.filter((s) => !grades.some((g) => g.studentId === s.id && g.assignmentId === aid))
-  }, [students, grades, formData.assignmentId])
+    return students.filter((s) => !grades.some((g) => g.studentId === s.id && g.assignmentId === aid) && !skippedStudentIds.includes(s.id))
+  }, [students, grades, formData.assignmentId, skippedStudentIds])
 
   // Mantener formData.studentId sincronizado con eligibleStudents cuando cambia el assignment o la lista elegible
   useEffect(() => {
@@ -369,6 +395,7 @@ export function GradeManagement({ teacherId }: GradeManagementProps) {
               // iniciar ciclo desde el primer estudiante al abrir nuevo diálogo
               setEditingGrade(null)
               setCurrentStudentIndex(0)
+                  setSkippedStudentIds([])
               setFormData({
                 studentId: students[0]?.id || 0,
                 assignmentId: assignments[0]?.id || 0,
@@ -474,11 +501,16 @@ export function GradeManagement({ teacherId }: GradeManagementProps) {
                   />
                 </div>
               </div>
-              <DialogFooter>
+                <DialogFooter>
                 {!editingGrade && (
-                  <Button type="button" variant="secondary" onClick={() => handleSubmit(undefined, true)} disabled={eligibleStudents.length === 0}>
-                    Seguir
-                  </Button>
+                  <>
+                    <Button type="button" variant="outline" onClick={handleSkip} disabled={eligibleStudents.length === 0}>
+                      Omitir
+                    </Button>
+                    <Button type="button" variant="secondary" onClick={() => handleSubmit(undefined, true)} disabled={eligibleStudents.length === 0}>
+                      Seguir
+                    </Button>
+                  </>
                 )}
                 <Button type="submit" disabled={!editingGrade && eligibleStudents.length === 0}>{editingGrade ? "Guardar Cambios" : "Registrar Calificación"}</Button>
               </DialogFooter>
