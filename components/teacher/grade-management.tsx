@@ -484,7 +484,11 @@ export function GradeManagement({ teacherId }: GradeManagementProps) {
                     onChange={(e) => {
                       const raw = e.target.value
                       const parsed = raw === '' ? NaN : Number.parseFloat(raw)
-                      setFormData({ ...formData, score: Number.isNaN(parsed) ? 0 : parsed })
+                      let value = Number.isNaN(parsed) ? 0 : parsed
+                      // Clamp to allowed range 0.0 - 5.0
+                      if (value < 0) value = 0
+                      if (value > 5) value = 5
+                      setFormData({ ...formData, score: value })
                     }}
                     required
                   />

@@ -443,6 +443,7 @@ export function EvaluationsManagement({ teacherId }: EvaluationsManagementProps)
                 <DialogTitle>Confirmar eliminación</DialogTitle>
                 <DialogDescription>
                   {deleteCandidate ? `Vas a eliminar la evaluación "${deleteCandidate.name}" de la materia "${getSubjectName(deleteCandidate.subjectId)}". Esta acción no se puede deshacer.` : '¿Estás seguro de eliminar esta evaluación?'}
+                  <div className="text-sm text-muted-foreground mt-2">Nota: Si la evaluación tiene calificaciones registradas, no podrá eliminarse y se mostrará un mensaje explicativo.</div>
                 </DialogDescription>
               </DialogHeader>
 
