@@ -23,6 +23,7 @@ export default function LoginPage() {
     e.preventDefault()
     setError("")
     setIsLoading(true)
+    // Local loading state will control the button and local UI
 
     // Simulate network delay
     await new Promise((resolve) => setTimeout(resolve, 500))
@@ -63,6 +64,7 @@ export default function LoginPage() {
           student: "/student",
         }
         const target = routeByRole[roleKey] ?? "/"
+        // Navigate immediately; the global loader will stay visible up to 20s while preloads run
         router.push(target)
         return
       }

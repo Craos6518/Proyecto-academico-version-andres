@@ -36,7 +36,12 @@ export function DashboardLayout({ children, user, title }: DashboardLayoutProps)
     : ((u['displayName'] ?? u['username']) as string | undefined) ?? (u['email'] ? String(u['email']).split("@")[0] : "Usuario")
 
   const handleLogout = () => {
-    authService.logout()
+    // Clear client storage and redirect
+    try {
+      authService.logoutClient()
+    } catch {
+      // noop
+    }
     router.push("/")
   }
 

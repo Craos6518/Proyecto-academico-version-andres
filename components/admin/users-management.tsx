@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -24,6 +24,7 @@ import type { User, Role } from "@/lib/types"
 import { Plus, Pencil, Trash2, Search, KeyRound, AlertCircle } from "lucide-react"
 // removed unused import changeUserPassword
 import { authService, normalizeRole } from "@/lib/auth"
+import { useLoading } from "@/components/loading-context"
 
 export function UsersManagement() {
   const handlePasswordChange = async () => {
@@ -91,18 +92,21 @@ export function UsersManagement() {
   const [passwordSuccess, setPasswordSuccess] = useState(false)
 
   const currentUser = authService.getCurrentUser()
-  const currentRole = normalizeRole(currentUser?.role ?? currentUser?.roleName)
-  const isDirector = currentRole === "director"
-  const isAdmin = currentRole === "admin"
+  const isDirector = normalizeRole(currentUser?.role ?? currentUser?.roleName) === "director"
+  const { show, hide } = useLoading()
 
-  useEffect(() => {
-    loadUsers()
-  }, [])
-
-  const loadUsers = () => {
-    fetch('/api/admin/users')
-      .then((r) => r.json())
-      .then((data) => {
+  const loadUsers = useCallback(() => {
+    // Show global loader while loading users; allow up to 20s for preload
+    void (async () => {
+      try {
+        show(20000)
+      } catch {
+        // noop if provider not available
+      }
+      try {
+        const r = await fetch('/api/admin/users')
+        if (!r.ok) throw new Error('Failed to fetch users')
+        const data = await r.json()
         const arr = (data || []) as Array<Record<string, unknown>>
         const mapped: User[] = arr.map((u) => ({
           id: Number(u['id'] ?? 0),
@@ -114,9 +118,21 @@ export function UsersManagement() {
           roleName: String(u['roleName'] ?? u['role_name'] ?? u['role'] ?? ''),
         }))
         setUsers(mapped)
-      })
-      .catch((err) => console.error('Failed to load users', err))
-  }
+      } catch (err) {
+        console.error('Failed to load users', err)
+      } finally {
+        try {
+          hide()
+        } catch {
+          // noop
+        }
+      }
+    })()
+  }, [show, hide])
+
+  useEffect(() => {
+    loadUsers()
+  }, [loadUsers])
 
   const [availableRoles, setAvailableRoles] = useState<Role[]>([])
 
